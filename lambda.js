@@ -156,7 +156,7 @@ exports.summaryHandler = async (event, context) => {
   }
 };
 
-// Test handler for sending test XIAOBAI message
+// Test handler for sending test messages for all token types
 exports.testHandler = async (event, context) => {
   try {
     console.log(
@@ -167,8 +167,8 @@ exports.testHandler = async (event, context) => {
     // Import the main bot functionality dynamically
     const botFunctions = await import("./index.js");
 
-    // Send the test message
-    await botFunctions.sendTestXiaobaiMessage();
+    // Send test messages for all token types
+    await botFunctions.sendAllTestMessages();
 
     return {
       statusCode: 200,
@@ -179,7 +179,7 @@ exports.testHandler = async (event, context) => {
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       },
       body: JSON.stringify({
-        message: "Test XIAOBAI message sent successfully",
+        message: "Test messages for all token types sent successfully",
         timestamp: new Date().toISOString(),
       }),
     };

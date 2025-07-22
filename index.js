@@ -57,9 +57,9 @@ const TOKEN_ICONS = {
 
 // --- Token videos (MP4) ---
 const TOKEN_VIDEOS = {
-  ETH: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/ethereum.mp4",
-  USDC: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/usdc.mp4",
-  USDT: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/usdt.mp4",
+  ETH: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+  USDC: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+  USDT: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
   XIAOBAI:
     "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
 };
@@ -268,17 +268,48 @@ function truncateAddress(addr) {
 
 async function sendDepositMessage(token, amount, from, to, txHash) {
   await initializeDB(); // Ensure db is initialized
-  const formattedAmount = `<b>🟢 ${Number(amount).toLocaleString("en-US", {
+
+  // Fetch USD prices for tokens that aren't USD-pegged
+  let usdValue = null;
+  if (token !== "USDC" && token !== "USDT") {
+    try {
+      const prices = await fetchPrices();
+      if (token === "ETH") {
+        usdValue = Number(amount) * prices.eth;
+      } else if (token === "XIAOBAI") {
+        usdValue = Number(amount) * prices.xiaobai;
+      }
+    } catch (error) {
+      console.log(`[Price] Error fetching price for ${token}:`, error);
+    }
+  }
+
+  // Format amount with USD value if available
+  let formattedAmount = `<b>🟢 ${Number(amount).toLocaleString("en-US", {
     maximumFractionDigits: 18,
-  })}</b>`;
-  const icon = TOKEN_ICONS[token] || "";
+  })} ${token}</b>`;
+
+  if (usdValue && usdValue > 0) {
+    // Use more decimal places for very small values
+    let decimalPlaces = 2;
+    if (usdValue < 0.01) {
+      decimalPlaces = 6; // Show up to 6 decimal places for very small values
+    } else if (usdValue < 1) {
+      decimalPlaces = 4; // Show up to 4 decimal places for small values
+    }
+
+    formattedAmount += ` <b>($${usdValue.toLocaleString("en-US", {
+      maximumFractionDigits: decimalPlaces,
+    })})</b>`;
+  }
+
   const fromLink = `<a href="https://etherscan.io/address/${from}">${truncateAddress(
     from
   )}</a>`;
   const toLink = `<a href="https://etherscan.io/address/${to}">${truncateAddress(
     to
   )}</a>`;
-  let msg = `New contribution detected!\n<b>Token:</b> ${icon} ${token}\n<b>Amount:</b> ${formattedAmount}\n<b>From:</b> ${fromLink}\n<b>To:</b> ${toLink}`;
+  let msg = `New contribution detected!\n<b>Token:</b> ${token}\n<b>Amount:</b> ${formattedAmount}\n<b>From:</b> ${fromLink}\n<b>To:</b> ${toLink}`;
   if (txHash) {
     msg += `\n<a href=\"https://etherscan.io/tx/${txHash}\">View Transaction</a>`;
   }
@@ -648,20 +679,89 @@ setInterval(sendHourlySummary, 60 * 60 * 1000);
 // Optionally, send one immediately on startup
 //sendHourlySummary();
 
-// Test function to send a dummy XIAOBAI transaction message
+// Test functions for each token type
+async function sendTestEthMessage() {
+  console.log("[Test] Sending test ETH message...");
+  try {
+    await sendDepositMessage(
+      "ETH",
+      "0.05", // 0.05 ETH (~$150)
+      "0x1111111111111111111111111111111111111111",
+      MARKETING_WALLET,
+      "0x3333333333333333333333333333333333333333333333333333333333333333"
+    );
+    console.log("[Test] Test ETH message sent successfully!");
+  } catch (error) {
+    console.error("[Test] Error sending ETH test message:", error);
+  }
+}
+
+async function sendTestUsdcMessage() {
+  console.log("[Test] Sending test USDC message...");
+  try {
+    await sendDepositMessage(
+      "USDC",
+      "150", // 150 USDC
+      "0x1111111111111111111111111111111111111111",
+      MARKETING_WALLET,
+      "0x3333333333333333333333333333333333333333333333333333333333333333"
+    );
+    console.log("[Test] Test USDC message sent successfully!");
+  } catch (error) {
+    console.error("[Test] Error sending USDC test message:", error);
+  }
+}
+
+async function sendTestUsdtMessage() {
+  console.log("[Test] Sending test USDT message...");
+  try {
+    await sendDepositMessage(
+      "USDT",
+      "250", // 250 USDT
+      "0x1111111111111111111111111111111111111111",
+      MARKETING_WALLET,
+      "0x3333333333333333333333333333333333333333333333333333333333333333"
+    );
+    console.log("[Test] Test USDT message sent successfully!");
+  } catch (error) {
+    console.error("[Test] Error sending USDT test message:", error);
+  }
+}
+
 async function sendTestXiaobaiMessage() {
   console.log("[Test] Sending test XIAOBAI message...");
   try {
     await sendDepositMessage(
       "XIAOBAI",
-      "123456.789",
+      "50000000", // 50 million XIAOBAI tokens (~$7.50)
       "0x1111111111111111111111111111111111111111",
-      "0x2222222222222222222222222222222222222222",
+      MARKETING_WALLET,
       "0x3333333333333333333333333333333333333333333333333333333333333333"
     );
     console.log("[Test] Test XIAOBAI message sent successfully!");
   } catch (error) {
-    console.error("[Test] Error sending test message:", error);
+    console.error("[Test] Error sending XIAOBAI test message:", error);
+  }
+}
+
+// Combined test function to send all token types
+async function sendAllTestMessages() {
+  console.log("[Test] Sending test messages for all token types...");
+  try {
+    await sendTestEthMessage();
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+    await sendTestUsdcMessage();
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+    await sendTestUsdtMessage();
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+    await sendTestXiaobaiMessage();
+
+    console.log("[Test] All test messages sent successfully!");
+  } catch (error) {
+    console.error("[Test] Error sending test messages:", error);
   }
 }
 
@@ -685,7 +785,11 @@ module.exports = {
   logDeposit,
   isTransactionProcessed,
   sendHourlySummary,
+  sendTestEthMessage,
+  sendTestUsdcMessage,
+  sendTestUsdtMessage,
   sendTestXiaobaiMessage,
+  sendAllTestMessages,
 };
 
 // Main execution based on mode - only run if this file is executed directly
