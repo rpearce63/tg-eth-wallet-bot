@@ -1,0 +1,298 @@
+service: tg-eth-wallet-bot
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+
+  # Environment variables
+  environment:
+    BOT_MODE: once
+    BLOCKS_TO_SCAN: 5
+    NODE_ENV: production
+
+  # IAM role permissions
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource:
+            - "arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/${self:service}-${sls:stage}-*"
+            - "arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/${self:service}-${sls:stage}-*:*"
+
+  # Lambda configuration
+  memorySize: 512
+  timeout: 25 # Reduced for API Gateway compatibility
+
+# Custom variables
+custom:
+  # Default values that can be overridden
+  telegramBotToken: ${env:TELEGRAM_BOT_TOKEN, 'your-bot-token-here'}
+  telegramChatId: ${env:TELEGRAM_CHAT_ID, '-1002545365231'}
+  ethereumRpc: ${env:ETHEREUM_RPC, 'https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555'}
+  pollingInterval: ${env:POLLING_INTERVAL, '30000'}
+  blocksToScan: ${env:BLOCKS_TO_SCAN, '5'}
+
+  # Schedule expressions
+  schedules:
+    frequent: rate(1 minute)
+    moderate: rate(5 minutes)
+    slow: rate(15 minutes)
+
+functions:
+  # Main wallet monitor function
+  walletMonitor:
+    handler: lambda.handler
+    description: Monitor Ethereum wallet for deposits and send Telegram notifications
+    timeout: 25 # API Gateway compatible
+    environment:
+      TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      ETHEREUM_RPC: ${self:custom.ethereumRpc}
+      BOT_MODE: once
+      BLOCKS_TO_SCAN: ${self:custom.blocksToScan}
+      POLLING_INTERVAL: ${self:custom.pollingInterval}
+
+    # API Gateway trigger
+    events:
+      - http:
+          path: /scan
+          method: post
+          cors: true
+
+      - http:
+          path: /scan
+          method: get
+          cors: true
+
+      # Scheduled execution - frequent (every minute)
+      - schedule:
+          rate: ${self:custom.schedules.frequent}
+          enabled: true
+          name: ${self:service}-frequent-scan-${sls:stage}
+
+      # Scheduled execution - moderate (every 5 minutes)
+      - schedule:
+          rate: ${self:custom.schedules.moderate}
+          enabled: false
+          name: ${self:service}-moderate-scan-${sls:stage}
+
+      # Scheduled execution - slow (every 15 minutes)
+      - schedule:
+          rate: ${self:custom.schedules.slow}
+          enabled: false
+          name: ${self:service}-slow-scan-${sls:stage}
+
+  # Alternative handler for scheduled events
+  scheduledMonitor:
+    handler: lambda.scheduledHandler
+    description: Alternative handler optimized for scheduled CloudWatch Events
+    timeout: 300 # Longer timeout for scheduled events
+    environment:
+      TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      ETHEREUM_RPC: ${self:custom.ethereumRpc}
+      BOT_MODE: once
+      BLOCKS_TO_SCAN: 20
+      POLLING_INTERVAL: ${self:custom.pollingInterval}
+
+    events:
+      - schedule:
+          rate: rate(10 minutes)
+          enabled: false
+          name: ${self:service}-alt-scan-${sls:stage}
+
+  # Health check function
+  healthCheck:
+    handler: lambda.healthHandler
+    description: Health check endpoint for monitoring
+    timeout: 10 # Quick health check
+    events:
+      - http:
+          path: /health
+          method: get
+          cors: true
+
+  # Summary function
+  summary:
+    handler: lambda.summaryHandler
+    description: Send hourly/daily summaries to Telegram
+    timeout: 25 # API Gateway compatible
+    environment:
+      TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      ETHEREUM_RPC: ${self:custom.ethereumRpc}
+      BOT_MODE: once
+      BLOCKS_TO_SCAN: 1 # Not scanning, just summary
+      POLLING_INTERVAL: ${self:custom.pollingInterval}
+
+    events:
+      # Hourly summary (every hour)
+      - schedule:
+          rate: rate(1 hour)
+          enabled: true
+          name: ${self:service}-hourly-summary-${sls:stage}
+
+      # Daily summary (every 24 hours)
+      - schedule:
+          rate: rate(24 hours)
+          enabled: false # Disabled by default
+          name: ${self:service}-daily-summary-${sls:stage}
+
+      # Manual trigger via HTTP
+      - http:
+          path: /summary
+          method: post
+          cors: true
+
+      - http:
+          path: /summary
+          method: get
+          cors: true
+
+  # Test function
+  test:
+    handler: lambda.testHandler
+    description: Send test XIAOBAI message to Telegram
+    timeout: 25 # API Gateway compatible
+    environment:
+      TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      ETHEREUM_RPC: ${self:custom.ethereumRpc}
+      BOT_MODE: once
+      BLOCKS_TO_SCAN: 1
+      POLLING_INTERVAL: ${self:custom.pollingInterval}
+
+    events:
+      # Manual trigger via HTTP
+      - http:
+          path: /test
+          method: post
+          cors: true
+
+      - http:
+          path: /test
+          method: get
+          cors: true
+
+# Package configuration
+package:
+  patterns:
+    - "!node_modules/.cache/**"
+    - "!*.md"
+    - "!*.log"
+    - "!test/**"
+    - "!coverage/**"
+    - "!.git/**"
+    - "!.vscode/**"
+    - "!*.zip"
+    - "!serverless.yml"
+    - "!package-lock.json"
+    - "!yarn.lock"
+
+# Resources (optional - for additional AWS resources)
+resources:
+  Resources:
+    # S3 Bucket for static assets (GIFs, images)
+    StaticAssetsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:service}-${sls:stage}-assets
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        CorsConfiguration:
+          CorsRules:
+            - AllowedHeaders: ["*"]
+              AllowedMethods: [GET]
+              AllowedOrigins: ["*"]
+              MaxAge: 3000
+
+    # S3 Bucket Policy for public read access
+    StaticAssetsBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref StaticAssetsBucket
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action: "s3:GetObject"
+              Resource: !Sub "arn:aws:s3:::${StaticAssetsBucket}/*"
+
+    # CloudWatch Dashboard for monitoring
+    MonitoringDashboard:
+      Type: AWS::CloudWatch::Dashboard
+      Properties:
+        DashboardName: ${self:service}-${sls:stage}-dashboard
+        DashboardBody: !Sub |
+          {
+            "widgets": [
+              {
+                "type": "metric",
+                "x": 0,
+                "y": 0,
+                "width": 12,
+                "height": 6,
+                "properties": {
+                  "metrics": [
+                    ["AWS/Lambda", "Invocations", "FunctionName", "${self:service}-${sls:stage}-walletMonitor"],
+                    [".", "Errors", ".", "."],
+                    [".", "Duration", ".", "."]
+                  ],
+                  "view": "timeSeries",
+                  "stacked": false,
+                  "region": "${aws:region}",
+                  "title": "Lambda Function Metrics"
+                }
+              }
+            ]
+          }
+
+# Outputs for easy access to function URLs
+outputs:
+  WalletMonitorUrl:
+    description: "URL for wallet monitor function"
+    value:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: ApiGatewayRestApi
+          - ".execute-api.${aws:region}.amazonaws.com/${sls:stage}/scan"
+
+  HealthCheckUrl:
+    description: "URL for health check function"
+    value:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: ApiGatewayRestApi
+          - ".execute-api.${aws:region}.amazonaws.com/${sls:stage}/health"
+
+  SummaryUrl:
+    description: "URL for summary function"
+    value:
+      Fn::Join:
+        - ""
+        - - "https://"
+          - Ref: ApiGatewayRestApi
+          - ".execute-api.${aws:region}.amazonaws.com/${sls:stage}/summary"
+
+  StaticAssetsUrl:
+    description: "URL for static assets (GIFs, images)"
+    value: !Sub "https://${StaticAssetsBucket}.s3.${aws:region}.amazonaws.com"
+
+  WalletMonitorFunction:
+    description: "Wallet monitor Lambda function ARN"
+    value: !GetAtt WalletMonitorLambdaFunction.Arn

@@ -1,0 +1,29 @@
+{
+  "name": "tg-eth-wallet-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot to monitor Ethereum wallet deposits and notify a chat.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "websocket": "node index.js websocket",
+    "polling": "node index.js polling",
+    "polling-fast": "node index.js polling 10000 5",
+    "polling-slow": "node index.js polling 60000 20",
+    "once": "node index.js once",
+    "once-recent": "node index.js once 30000 5",
+    "deploy": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod",
+    "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
+    "upload-assets:prod": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-prod-assets/ --recursive",
+    "deploy-full": "npm run deploy && npm run upload-assets"
+  },
+  "dependencies": {
+    "ethers": "^6.8.1",
+    "lowdb": "^6.1.1",
+    "node-fetch": "^2.7.0",
+    "node-telegram-bot-api": "^0.61.0"
+  },
+  "devDependencies": {
+    "serverless-dotenv-plugin": "^6.0.0"
+  }
+}
