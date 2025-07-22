@@ -94,10 +94,139 @@ async function initializeDB() {
     const dbFile = isLambda
       ? path.join(__dirname, "deposits-deploy.json")
       : path.join(__dirname, "deposits.json");
+
     const adapter = new JSONFile(dbFile);
     db = new Low(adapter, { deposits: [] });
-    dbInitialized = true;
 
+    // Try to read from file
+    try {
+      await db.read();
+      console.log(`[DB] Loaded ${db.data.deposits.length} deposits from file`);
+    } catch (readError) {
+      console.log("[DB] Could not read from file, using fallback data");
+      // Fallback to in-memory with historical data for Lambda
+      if (isLambda) {
+        db.data = {
+          deposits: [
+            {
+              token: "USDT",
+              amount: "100",
+              from: "0x3F3aA3Bd1E0D80a2470689D0cDf19f7a97c16123",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0xa266d3a138d48b0f6034883c8b1b7625134653933a961c789170091d203e4f20",
+              timestamp: 1753014587000,
+            },
+            {
+              token: "XIAOBAI",
+              amount: "56189253406.28855",
+              from: "0xad91e2a2CFa185B2b37eCa4D10b6E7A56c6Ae517",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x2c250cff8c0dc97daa18beaa2498b4e6dbbf43188c0afa10b2bcba9673385562",
+              timestamp: 1753015787000,
+            },
+            {
+              token: "XIAOBAI",
+              amount: "97566128924.69758",
+              from: "0x75426b3dA78B556ea4692F0A3BdEcC7aE33772eC",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0xeaf40b888e9ad5a40b3f3454d9c700201e21a9fa2c26dcbdf934bc481a4c19b2",
+              timestamp: 1753015943000,
+            },
+            {
+              token: "USDC",
+              amount: "2244",
+              from: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              to: "0x9008D19f58AAbD9eD0D60971565AA8510560ab41",
+              txHash:
+                "0xa718c88e8c331fd38f419a354d5e116f4ec6c5cdfd4fb88d0c0e5ce79b4939c1",
+              timestamp: 1752938231000,
+            },
+            {
+              token: "USDT",
+              amount: "100",
+              from: "0x3F3aA3Bd1E0D80a2470689D0cDf19f7a97c16123",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0xb5f9fbd6330aa51f19f48dbdf24379668b9b06e77f66bc14141d826c652b9bff",
+              timestamp: 1752844787000,
+            },
+            {
+              token: "USDC",
+              amount: "200",
+              from: "0x1cA5aa5b1dd8D948bB0971A5fB1762FE172E0040",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x85a314299e4edc624a2b2fdad91456d9a9d0aa8662700de3c427ddbfc5bfadcb",
+              timestamp: 1752812231000,
+            },
+            {
+              token: "USDC",
+              amount: "547",
+              from: "0x1cA5aa5b1dd8D948bB0971A5fB1762FE172E0040",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x4d6c10fa45e0cde5ececdb1f77a5b1d4c1ca4dba2a34341cb74e31358b184112",
+              timestamp: 1752671579000,
+            },
+            {
+              token: "USDC",
+              amount: "497",
+              from: "0x1cA5aa5b1dd8D948bB0971A5fB1762FE172E0040",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x5aca7d2398e6837c754a2abf98445b133993d80505590651eabfe54089f9b03a",
+              timestamp: 1752666647000,
+            },
+            {
+              token: "XIAOBAI",
+              amount: "22884466554",
+              from: "0x4FBBd22D32b21a6f98f7F4CDB730b433682Eb676",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0xf0c2d5533eb8e15cad7ac14dd79953f5194b6450231a7a51ae189205099f5577",
+              timestamp: 1752595415000,
+            },
+            {
+              token: "XIAOBAI",
+              amount: "20000000000",
+              from: "0x97D7d3cB92188770D1C76DdB0AB225cE64AD5411",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x1989c0e74abb7c88ec543ad7f4274c2f54aa31d76e841b40e5a19b5b580a63a7",
+              timestamp: 1752595187000,
+            },
+            {
+              token: "USDC",
+              amount: "396",
+              from: "0x1cA5aa5b1dd8D948bB0971A5fB1762FE172E0040",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x142aaf39497bb36a7820ed4a7242aaddc8dc8078f76a22b22884deffcb823607",
+              timestamp: 1752582647000,
+            },
+            {
+              token: "USDC",
+              amount: "302",
+              from: "0x1cA5aa5b1dd8d948bB0971A5fB1762FE172E0040",
+              to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+              txHash:
+                "0x1d452de45dd430a4dbe2df730091843d3784d3996731fb51b9a9d93f97dfaaa3",
+              timestamp: 1752574487000,
+            },
+          ],
+        };
+        console.log(
+          `[DB] Loaded ${db.data.deposits.length} historical deposits for Lambda`
+        );
+      } else {
+        db.data = { deposits: [] };
+      }
+    }
+
+    dbInitialized = true;
     return db;
   } catch (error) {
     console.error("[DB] Error initializing database:", error);
@@ -658,15 +787,18 @@ async function sendHourlySummary() {
   msg += `\n<b>Total Contributions:</b>\n`;
   msg += `Last 24h: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
-    msg += `${fmt(dayTotals[symbol], symbol)} `;
+    const amount = dayTotals[symbol] || 0;
+    msg += `${fmt(amount, symbol)} `;
   }
   msg += `\nLast 7d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
-    msg += `${fmt(weekTotals[symbol], symbol)} `;
+    const amount = weekTotals[symbol] || 0;
+    msg += `${fmt(amount, symbol)} `;
   }
   msg += `\nLast 30d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
-    msg += `${fmt(monthTotals[symbol], symbol)} `;
+    const amount = monthTotals[symbol] || 0;
+    msg += `${fmt(amount, symbol)} `;
   }
   msg += `\n\nKeep contributing to beat the previous records! 🚀`;
   // Always add the XIAOBAI chart link
