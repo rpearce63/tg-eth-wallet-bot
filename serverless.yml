@@ -49,6 +49,15 @@ custom:
     moderate: rate(5 minutes)
     slow: rate(15 minutes)
 
+  # Environment-specific schedule settings
+  scheduleSettings:
+    dev:
+      frequent: ${env:DEV_FREQUENT_SCAN, 'false'} # Disable by default in dev
+      summary: ${env:DEV_SUMMARY_SCAN, 'false'} # Disable by default in dev
+    prod:
+      frequent: ${env:PROD_FREQUENT_SCAN, 'true'} # Enable by default in prod
+      summary: ${env:PROD_SUMMARY_SCAN, 'true'} # Enable by default in prod
+
 functions:
   # Main wallet monitor function
   walletMonitor:
@@ -78,7 +87,7 @@ functions:
       # Scheduled execution - frequent (every minute)
       - schedule:
           rate: ${self:custom.schedules.frequent}
-          enabled: true
+          enabled: ${self:custom.scheduleSettings.${sls:stage}.frequent}
           name: ${self:service}-frequent-scan-${sls:stage}
 
       # Scheduled execution - moderate (every 5 minutes)
@@ -140,7 +149,7 @@ functions:
       # Hourly summary (every hour)
       - schedule:
           rate: rate(1 hour)
-          enabled: true
+          enabled: ${self:custom.scheduleSettings.${sls:stage}.summary}
           name: ${self:service}-hourly-summary-${sls:stage}
 
       # Daily summary (every 24 hours)

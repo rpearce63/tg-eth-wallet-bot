@@ -200,6 +200,21 @@ TELEGRAM_CHAT_ID_DEV="-1001234567890" serverless deploy --stage dev
 TELEGRAM_CHAT_ID_PROD="-1009876543210" serverless deploy --stage prod
 ```
 
+### Development Environment Control
+
+Control when dev environment sends notifications:
+
+```bash
+# Enable dev scanning (for active development)
+npm run deploy:dev:on
+
+# Disable dev scanning (when not working on updates)
+npm run deploy:dev:off
+
+# Manual deployment with custom settings
+DEV_FREQUENT_SCAN=true DEV_SUMMARY_SCAN=false serverless deploy --stage dev
+```
+
 ### Quick Lambda Setup
 
 ```bash

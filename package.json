@@ -13,6 +13,8 @@
     "once-recent": "node index.js once 30000 5",
     "deploy": "serverless deploy --stage dev",
     "deploy:prod": "serverless deploy --stage prod",
+    "deploy:dev:on": "DEV_FREQUENT_SCAN=true DEV_SUMMARY_SCAN=true serverless deploy --stage dev",
+    "deploy:dev:off": "DEV_FREQUENT_SCAN=false DEV_SUMMARY_SCAN=false serverless deploy --stage dev",
     "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
     "upload-assets:prod": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-prod-assets/ --recursive",
     "deploy-full": "npm run deploy && npm run upload-assets"
