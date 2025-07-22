@@ -761,6 +761,31 @@ async function sendHourlySummary() {
   const weekTotals = await sumDeposits(deposits, 7 * 24 * 60 * 60 * 1000);
   const monthTotals = await sumDeposits(deposits, 30 * 24 * 60 * 60 * 1000);
 
+  // Helper function to calculate total USD value for a time period
+  function calculateTotalUsdValue(totals, prices) {
+    let totalUsd = 0;
+
+    // ETH value
+    if (totals.ETH) {
+      totalUsd += Number(totals.ETH) * prices.eth;
+    }
+
+    // USDC and USDT (assumed $1 each)
+    if (totals.USDC) {
+      totalUsd += Number(totals.USDC);
+    }
+    if (totals.USDT) {
+      totalUsd += Number(totals.USDT);
+    }
+
+    // XIAOBAI value
+    if (totals.XIAOBAI) {
+      totalUsd += Number(totals.XIAOBAI) * prices.xiaobai;
+    }
+
+    return totalUsd;
+  }
+
   function fmt(val, token, usd) {
     let str = `<b>${Number(val || 0).toLocaleString("en-US", {
       maximumFractionDigits: 8,
@@ -785,21 +810,38 @@ async function sendHourlySummary() {
   const xiaobaiUsd = Number(balances.XIAOBAI) * prices.xiaobai;
   msg += `XIAOBAI: ${fmt(balances.XIAOBAI, "XIAOBAI", xiaobaiUsd)}\n`;
   msg += `\n<b>Total Contributions:</b>\n`;
+
+  // Calculate total USD values for each period
+  const dayTotalUsd = calculateTotalUsdValue(dayTotals, prices);
+  const weekTotalUsd = calculateTotalUsdValue(weekTotals, prices);
+  const monthTotalUsd = calculateTotalUsdValue(monthTotals, prices);
+
   msg += `Last 24h: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = dayTotals[symbol] || 0;
     msg += `${fmt(amount, symbol)} `;
   }
+  msg += `($${dayTotalUsd.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })})`;
+
   msg += `\nLast 7d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = weekTotals[symbol] || 0;
     msg += `${fmt(amount, symbol)} `;
   }
+  msg += `($${weekTotalUsd.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })})`;
+
   msg += `\nLast 30d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = monthTotals[symbol] || 0;
     msg += `${fmt(amount, symbol)} `;
   }
+  msg += `($${monthTotalUsd.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })})`;
   msg += `\n\nKeep contributing to beat the previous records! 🚀`;
   // Always add the XIAOBAI chart link
   msg += `\n<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
