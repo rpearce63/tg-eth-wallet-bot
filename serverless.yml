@@ -38,7 +38,7 @@ custom:
   # Chat IDs for different environments
   telegramChatId:
     dev: ${env:TELEGRAM_CHAT_ID_DEV, '-1002545365231'} # Test chat for dev
-    prod: ${env:TELEGRAM_CHAT_ID_PROD, '-1002753827191'} # Production chat
+    prod: "-1002753827191" # Production chat (hardcoded)
   ethereumRpc: ${env:ETHEREUM_RPC, 'https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555'}
   pollingInterval: ${env:POLLING_INTERVAL, '30000'}
   blocksToScan: ${env:BLOCKS_TO_SCAN, '5'}
