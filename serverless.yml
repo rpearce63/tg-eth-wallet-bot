@@ -35,7 +35,10 @@ provider:
 custom:
   # Default values that can be overridden
   telegramBotToken: ${env:TELEGRAM_BOT_TOKEN, 'your-bot-token-here'}
-  telegramChatId: ${env:TELEGRAM_CHAT_ID, '-1002545365231'}
+  # Chat IDs for different environments
+  telegramChatId:
+    dev: ${env:TELEGRAM_CHAT_ID_DEV, '-1002545365231'} # Test chat for dev
+    prod: ${env:TELEGRAM_CHAT_ID_PROD, '-1002545365231'} # Production chat (same for now)
   ethereumRpc: ${env:ETHEREUM_RPC, 'https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555'}
   pollingInterval: ${env:POLLING_INTERVAL, '30000'}
   blocksToScan: ${env:BLOCKS_TO_SCAN, '5'}
@@ -54,7 +57,7 @@ functions:
     timeout: 25 # API Gateway compatible
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
-      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
       BLOCKS_TO_SCAN: ${self:custom.blocksToScan}
@@ -97,7 +100,7 @@ functions:
     timeout: 300 # Longer timeout for scheduled events
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
-      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
       BLOCKS_TO_SCAN: 20
@@ -127,7 +130,7 @@ functions:
     timeout: 25 # API Gateway compatible
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
-      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
       BLOCKS_TO_SCAN: 1 # Not scanning, just summary
@@ -164,7 +167,7 @@ functions:
     timeout: 25 # API Gateway compatible
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
-      TELEGRAM_CHAT: ${self:custom.telegramChatId}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
       BLOCKS_TO_SCAN: 1

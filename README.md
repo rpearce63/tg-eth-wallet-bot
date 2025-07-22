@@ -23,9 +23,21 @@ The bot can be configured using environment variables or command line arguments:
 
 ### Environment Variables
 
+#### Bot Configuration
+
 - `BOT_MODE`: "websocket", "polling", or "once" (default: "websocket")
 - `POLLING_INTERVAL`: Interval in milliseconds for polling mode (default: 30000)
 - `BLOCKS_TO_SCAN`: Number of blocks to scan in polling/once mode (default: 10)
+
+#### Telegram Configuration
+
+- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
+- `TELEGRAM_CHAT_ID_DEV`: Development/test chat ID (default: -1002545365231)
+- `TELEGRAM_CHAT_ID_PROD`: Production chat ID (default: -1002545365231)
+
+#### Blockchain Configuration
+
+- `ETHEREUM_RPC`: Ethereum RPC endpoint (WebSocket or HTTP)
 
 ### Command Line Arguments
 
@@ -168,7 +180,27 @@ The bot provides console logging for:
 
 For serverless deployment, see the comprehensive guide in [LAMBDA_DEPLOYMENT.md](./LAMBDA_DEPLOYMENT.md).
 
-Quick Lambda setup:
+### Environment-Specific Deployment
+
+The bot supports different Telegram chat IDs for development and production environments:
+
+```bash
+# Development deployment (uses TELEGRAM_CHAT_ID_DEV)
+serverless deploy --stage dev
+
+# Production deployment (uses TELEGRAM_CHAT_ID_PROD)
+serverless deploy --stage prod
+
+# Set environment variables
+export TELEGRAM_CHAT_ID_DEV="-1002545365231"  # Test chat
+export TELEGRAM_CHAT_ID_PROD="-1002545365231" # Production chat (update when ready)
+
+# Deploy with custom chat IDs
+TELEGRAM_CHAT_ID_DEV="-1001234567890" serverless deploy --stage dev
+TELEGRAM_CHAT_ID_PROD="-1009876543210" serverless deploy --stage prod
+```
+
+### Quick Lambda Setup
 
 ```bash
 # Create deployment package
