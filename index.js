@@ -89,7 +89,11 @@ async function initializeDB() {
     const { Low } = await import("lowdb");
     const { JSONFile } = await import("lowdb/node");
 
-    const dbFile = path.join(__dirname, "deposits.json");
+    // Use deployment file in Lambda, local file for development
+    const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
+    const dbFile = isLambda
+      ? path.join(__dirname, "deposits-deploy.json")
+      : path.join(__dirname, "deposits.json");
     const adapter = new JSONFile(dbFile);
     db = new Low(adapter, { deposits: [] });
     dbInitialized = true;

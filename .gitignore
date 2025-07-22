@@ -158,8 +158,11 @@ jspm_packages/
 ehthumbs.db
 Thumbs.db
 
-# Local database files
-deposits.json
+# Local database files (uncomment to exclude from git)
+# deposits.json
+
+# Deployment database file
+deposits-deploy.json
 
 # Assets folder (contains media files)
 assets/ 
