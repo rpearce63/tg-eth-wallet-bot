@@ -23,7 +23,13 @@
     "update-prod": "node scripts/update-from-etherscan.js prod",
     "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
     "upload-assets:prod": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-prod-assets/ --recursive",
-    "deploy-full": "npm run deploy && npm run upload-assets"
+    "deploy-full": "npm run deploy && npm run upload-assets",
+    "test:images": "STAGE=dev node test-image-sizes.js",
+    "test:images:only": "STAGE=dev node test-image-sizes.js image",
+    "test:videos": "STAGE=dev node test-image-sizes.js video",
+    "test:functions": "STAGE=dev node test-dev-functions.js",
+    "test:functions:all": "STAGE=dev node test-dev-functions.js --all",
+    "test:all": "npm run test:images && npm run test:functions"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.450.0",

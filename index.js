@@ -102,6 +102,19 @@ const TOKEN_IMAGES = {
       : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
 };
 
+// --- Image size configuration ---
+const IMAGE_SIZE_CONFIG = {
+  width: 400, // Width in pixels
+  height: 300, // Height in pixels
+  // You can also specify different sizes for different tokens
+  tokenSpecific: {
+    ETH: { width: 450, height: 338 },
+    USDC: { width: 400, height: 300 },
+    USDT: { width: 400, height: 300 },
+    XIAOBAI: { width: 500, height: 375 },
+  },
+};
+
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 
 let provider;
@@ -580,7 +593,7 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
   const toLink = `<a href="https://etherscan.io/address/${to}">${truncateAddress(
     to
   )}</a>`;
-  let msg = `New contribution detected!\n<b>Token:</b> ${token}\n<b>Amount:</b> ${formattedAmount}\n<b>From:</b> ${fromLink}\n<b>To:</b> ${toLink}`;
+  let msg = `<b>New contribution detected!</b>\n\n<b>Token:</b> ${token}\n<b>Amount:</b> ${formattedAmount}\n\n<b>From:</b> ${fromLink}\n<b>To:</b> ${toLink}\n`;
   if (txHash) {
     msg += `\n<a href=\"https://etherscan.io/tx/${txHash}\">View Transaction</a>`;
   }
@@ -593,10 +606,19 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
 
   if (videoUrl) {
     try {
+      // Get token-specific size or use default
+      const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
+        width: IMAGE_SIZE_CONFIG.width,
+        height: IMAGE_SIZE_CONFIG.height,
+      };
+
       await bot.sendVideo(TELEGRAM_CHAT, videoUrl, {
         caption: msg,
         parse_mode: "HTML",
         disable_web_page_preview: true,
+        width: sizeConfig.width,
+        height: sizeConfig.height,
+        supports_streaming: true, // Enable streaming for better performance
       });
     } catch (error) {
       console.log(
@@ -604,10 +626,18 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       );
       // Fallback to image
       if (imageUrl) {
+        // Get token-specific size or use default
+        const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
+          width: IMAGE_SIZE_CONFIG.width,
+          height: IMAGE_SIZE_CONFIG.height,
+        };
+
         await bot.sendPhoto(TELEGRAM_CHAT, imageUrl, {
           caption: msg,
           parse_mode: "HTML",
           disable_web_page_preview: true,
+          width: sizeConfig.width,
+          height: sizeConfig.height,
         });
       } else {
         await bot.sendMessage(TELEGRAM_CHAT, msg, {
@@ -617,10 +647,18 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       }
     }
   } else if (imageUrl) {
+    // Get token-specific size or use default
+    const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
+      width: IMAGE_SIZE_CONFIG.width,
+      height: IMAGE_SIZE_CONFIG.height,
+    };
+
     await bot.sendPhoto(TELEGRAM_CHAT, imageUrl, {
       caption: msg,
       parse_mode: "HTML",
       disable_web_page_preview: true,
+      width: sizeConfig.width,
+      height: sizeConfig.height,
     });
   } else {
     await bot.sendMessage(TELEGRAM_CHAT, msg, {
@@ -960,7 +998,8 @@ async function sendHourlySummary() {
   }
 
   function fmt(val, token, usd) {
-    let str = `<b>${Number(val || 0).toLocaleString("en-US", {
+    const amount = Number(val || 0);
+    let str = `<b>${amount.toLocaleString("en-US", {
       maximumFractionDigits: 8,
     })} ${token}</b>`;
     if (usd) {
@@ -992,32 +1031,32 @@ async function sendHourlySummary() {
   msg += `Last 24h: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = dayTotals[symbol] || 0;
-    msg += `${fmt(amount, symbol)} `;
+    msg += `${fmt(amount, symbol)}; `;
   }
-  msg += `($${dayTotalUsd.toLocaleString("en-US", {
+  msg += `<b>TOTAL</b> ($${dayTotalUsd.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   })})`;
 
-  msg += `\nLast 7d: `;
+  msg += `\n\nLast 7d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = weekTotals[symbol] || 0;
-    msg += `${fmt(amount, symbol)} `;
+    msg += `${fmt(amount, symbol)}; `;
   }
-  msg += `($${weekTotalUsd.toLocaleString("en-US", {
+  msg += `<b>TOTAL</b> ($${weekTotalUsd.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   })})`;
 
-  msg += `\nLast 30d: `;
+  msg += `\n\nLast 30d: `;
   for (const symbol of ["ETH", ...Object.keys(TOKENS)]) {
     const amount = monthTotals[symbol] || 0;
-    msg += `${fmt(amount, symbol)} `;
+    msg += `${fmt(amount, symbol)}; `;
   }
-  msg += `($${monthTotalUsd.toLocaleString("en-US", {
+  msg += `<b>TOTAL</b> ($${monthTotalUsd.toLocaleString("en-US", {
     maximumFractionDigits: 2,
   })})`;
-  msg += `\n\nKeep contributing to beat the previous records! 🚀`;
+  msg += `\n\nKeep contributing to beat the previous records! 🚀\n`;
   // Always add the XIAOBAI chart link
-  msg += `\n<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
+  msg += `<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
 
   await bot.sendMessage(TELEGRAM_CHAT, msg, {
     parse_mode: "HTML",
