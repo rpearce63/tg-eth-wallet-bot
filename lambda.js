@@ -164,6 +164,28 @@ exports.testHandler = async (event, context) => {
       JSON.stringify(event, null, 2)
     );
 
+    // SECURITY: Check for authentication token
+    const authToken =
+      event.headers?.["x-auth-token"] || event.headers?.["X-Auth-Token"];
+    const expectedToken = process.env.TEST_AUTH_TOKEN;
+
+    if (!expectedToken || authToken !== expectedToken) {
+      console.log("[Lambda] Test endpoint accessed without valid auth token");
+      return {
+        statusCode: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Headers": "Content-Type, X-Auth-Token",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        },
+        body: JSON.stringify({
+          error: "Unauthorized - Valid X-Auth-Token header required",
+          timestamp: new Date().toISOString(),
+        }),
+      };
+    }
+
     // Import the main bot functionality dynamically
     const botFunctions = await import("./index.js");
 

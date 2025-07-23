@@ -193,6 +193,7 @@ functions:
       BOT_MODE: once
       BLOCKS_TO_SCAN: 1
       POLLING_INTERVAL: ${self:custom.pollingInterval}
+      TEST_AUTH_TOKEN: ${env:TEST_AUTH_TOKEN, 'REQUIRED_AUTH_TOKEN_NOT_SET'}
 
     events:
       # Manual trigger via HTTP

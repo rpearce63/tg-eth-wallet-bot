@@ -54,13 +54,15 @@ Test via the deployed dev API endpoints:
 
 ```bash
 # Health check
-curl https://0iqnm7nlak.execute-api.us-east-1.amazonaws.com/dev/health
+curl https://YOUR-DEV-API-ENDPOINT/dev/health
 
-# Test endpoint
-curl -X POST https://0iqnm7nlak.execute-api.us-east-1.amazonaws.com/dev/test
+# Test endpoint (use with caution - sends test messages)
+# REQUIRES AUTHENTICATION: Set TEST_AUTH_TOKEN environment variable
+curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/test \
+  -H "X-Auth-Token: YOUR_AUTH_TOKEN"
 
 # Manual scan
-curl -X POST https://0iqnm7nlak.execute-api.us-east-1.amazonaws.com/dev/scan
+curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/scan
 ```
 
 ## 📱 **Dev Environment Details**
@@ -68,7 +70,7 @@ curl -X POST https://0iqnm7nlak.execute-api.us-east-1.amazonaws.com/dev/scan
 - **Chat ID**: `-1002545365231` (Test chat)
 - **S3 Assets**: `tg-eth-wallet-bot-dev-assets`
 - **DynamoDB Table**: `tg-eth-wallet-bot-deposits-dev`
-- **API Endpoint**: `https://0iqnm7nlak.execute-api.us-east-1.amazonaws.com/dev/`
+- **API Endpoint**: `https://YOUR-DEV-API-ENDPOINT/dev/`
 
 ## 🔧 **Test Configuration**
 
@@ -91,6 +93,30 @@ const IMAGE_SIZE_CONFIG = {
 - **USDC**: 150 USDC
 - **USDT**: 250 USDT
 - **XIAOBAI**: 50,000,000 tokens (~$7.50)
+
+## 🔒 **Security Requirements**
+
+### Authentication for Test Endpoints
+
+The test endpoints require authentication to prevent unauthorized access:
+
+```bash
+# Set your auth token (use a strong, random token)
+export TEST_AUTH_TOKEN="your-secure-random-token-here"
+
+# Test with authentication
+curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/test \
+  -H "X-Auth-Token: $TEST_AUTH_TOKEN"
+```
+
+### Environment Variables
+
+Set these environment variables before testing:
+
+```bash
+export TEST_AUTH_TOKEN="your-secure-random-token"
+export STAGE="dev"
+```
 
 ## 🚫 **What NOT to Test in Production**
 
