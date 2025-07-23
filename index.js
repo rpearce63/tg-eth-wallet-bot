@@ -89,31 +89,39 @@ let erc20Listeners = [];
 let db = null;
 let dbInitialized = false;
 
+// DynamoDB client for Lambda environment
+let dynamoClient = null;
+
 async function initializeDB() {
   if (dbInitialized) return db;
 
-  try {
-    const { Low } = await import("lowdb");
-    const { JSONFile } = await import("lowdb/node");
+  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
 
-    // Use deployment file in Lambda, local file for development
-    const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
-    const dbFile = isLambda
-      ? path.join(__dirname, "deposits-deploy.json")
-      : path.join(__dirname, "deposits.json");
-
-    const adapter = new JSONFile(dbFile);
-    db = new Low(adapter, { deposits: [] });
-
-    // Try to read from file
+  if (isLambda) {
+    // Use DynamoDB in Lambda environment
     try {
-      await db.read();
-      console.log(`[DB] Loaded ${db.data.deposits.length} deposits from file`);
-    } catch (readError) {
-      console.log("[DB] Could not read from file, using fallback data");
-      // Fallback to in-memory with historical data for Lambda
-      if (isLambda) {
-        db.data = {
+      const { DynamoDBClient } = await import("@aws-sdk/client-dynamodb");
+      const { DynamoDBDocumentClient } = await import("@aws-sdk/lib-dynamodb");
+
+      dynamoClient = DynamoDBDocumentClient.from(new DynamoDBClient());
+
+      // Load deposits from DynamoDB
+      const deposits = await loadDepositsFromDynamoDB();
+
+      db = {
+        data: { deposits },
+        read: async () => {}, // No-op for DynamoDB
+        write: async () => {}, // No-op for DynamoDB
+      };
+
+      console.log(`[DB] Loaded ${deposits.length} deposits from DynamoDB`);
+      dbInitialized = true;
+      return db;
+    } catch (error) {
+      console.error("[DB] Error initializing DynamoDB:", error);
+      // Fallback to in-memory with historical data
+      db = {
+        data: {
           deposits: [
             {
               token: "USDT",
@@ -224,27 +232,91 @@ async function initializeDB() {
               timestamp: 1752574487000,
             },
           ],
-        };
+        },
+        read: async () => {},
+        write: async () => {},
+      };
+      dbInitialized = true;
+      return db;
+    }
+  } else {
+    // Use local file storage for development
+    try {
+      const { Low } = await import("lowdb");
+      const { JSONFile } = await import("lowdb/node");
+
+      const dbFile = path.join(__dirname, "deposits.json");
+      const adapter = new JSONFile(dbFile);
+      db = new Low(adapter, { deposits: [] });
+
+      try {
+        await db.read();
         console.log(
-          `[DB] Loaded ${db.data.deposits.length} historical deposits for Lambda`
+          `[DB] Loaded ${db.data.deposits.length} deposits from file`
         );
-      } else {
+      } catch (readError) {
+        console.log("[DB] Could not read from file, using empty data");
         db.data = { deposits: [] };
       }
-    }
 
-    dbInitialized = true;
-    return db;
+      dbInitialized = true;
+      return db;
+    } catch (error) {
+      console.error("[DB] Error initializing database:", error);
+      db = {
+        data: { deposits: [] },
+        read: async () => {},
+        write: async () => {},
+      };
+      dbInitialized = true;
+      return db;
+    }
+  }
+}
+
+// Load deposits from DynamoDB
+async function loadDepositsFromDynamoDB() {
+  if (!dynamoClient) return [];
+
+  try {
+    const { ScanCommand } = await import("@aws-sdk/client-dynamodb");
+
+    const command = new ScanCommand({
+      TableName: "tg-eth-wallet-bot-deposits",
+    });
+
+    const response = await dynamoClient.send(command);
+    return response.Items || [];
   } catch (error) {
-    console.error("[DB] Error initializing database:", error);
-    // Fallback to in-memory storage
-    db = {
-      data: { deposits: [] },
-      read: async () => {},
-      write: async () => {},
-    };
-    dbInitialized = true;
-    return db;
+    console.error("[DB] Error loading from DynamoDB:", error);
+    return [];
+  }
+}
+
+// Save deposit to DynamoDB
+async function saveDepositToDynamoDB(deposit) {
+  if (!dynamoClient) return false;
+
+  try {
+    const { PutCommand } = await import("@aws-sdk/client-dynamodb");
+
+    const command = new PutCommand({
+      TableName: "tg-eth-wallet-bot-deposits",
+      Item: {
+        txHash: { S: deposit.txHash },
+        token: { S: deposit.token },
+        amount: { S: deposit.amount },
+        from: { S: deposit.from },
+        to: { S: deposit.to },
+        timestamp: { N: deposit.timestamp.toString() },
+      },
+    });
+
+    await dynamoClient.send(command);
+    return true;
+  } catch (error) {
+    console.error("[DB] Error saving to DynamoDB:", error);
+    return false;
   }
 }
 
@@ -253,7 +325,7 @@ async function logDeposit({ token, amount, from, to, txHash }) {
   await initializeDB(); // Ensure db is initialized
   if (to.toLowerCase() !== MARKETING_WALLET) return;
 
-  await db.read();
+  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
 
   // Check for duplicate transaction hash
   const isDuplicate = db.data.deposits.some(
@@ -265,15 +337,32 @@ async function logDeposit({ token, amount, from, to, txHash }) {
     return false; // Indicate this was a duplicate
   }
 
-  db.data.deposits.push({
+  const deposit = {
     token,
     amount,
     from,
     to,
     txHash,
     timestamp: Date.now(),
-  });
-  await db.write();
+  };
+
+  if (isLambda) {
+    // Save to DynamoDB in Lambda environment
+    const saved = await saveDepositToDynamoDB(deposit);
+    if (saved) {
+      db.data.deposits.push(deposit);
+      console.log(`[DB] Saved deposit to DynamoDB: ${txHash}`);
+    } else {
+      console.error(`[DB] Failed to save deposit to DynamoDB: ${txHash}`);
+      return false;
+    }
+  } else {
+    // Save to local file in development
+    await db.read();
+    db.data.deposits.push(deposit);
+    await db.write();
+  }
+
   return true; // Indicate this was a new deposit
 }
 

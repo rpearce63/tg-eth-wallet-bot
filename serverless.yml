@@ -26,6 +26,13 @@ provider:
           Resource:
             - "arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/${self:service}-${sls:stage}-*"
             - "arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/${self:service}-${sls:stage}-*:*"
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:Scan
+            - dynamodb:Query
+          Resource: !GetAtt DepositsTable.Arn
 
   # Lambda configuration
   memorySize: 512
@@ -239,6 +246,22 @@ package:
 # Resources (optional - for additional AWS resources)
 resources:
   Resources:
+    # DynamoDB table for deposit storage
+    DepositsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: tg-eth-wallet-bot-deposits
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: txHash
+            AttributeType: S
+        KeySchema:
+          - AttributeName: txHash
+            KeyType: HASH
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: false
+
     # S3 Bucket for static assets (GIFs, images)
     StaticAssetsBucket:
       Type: AWS::S3::Bucket
