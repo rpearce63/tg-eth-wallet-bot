@@ -281,8 +281,12 @@ async function loadDepositsFromDynamoDB() {
   try {
     const { ScanCommand } = await import("@aws-sdk/client-dynamodb");
 
+    // Get stage from environment variable or default to 'dev'
+    const stage = process.env.STAGE || "dev";
+    const tableName = `tg-eth-wallet-bot-deposits-${stage}`;
+
     const command = new ScanCommand({
-      TableName: "tg-eth-wallet-bot-deposits",
+      TableName: tableName,
     });
 
     const response = await dynamoClient.send(command);
@@ -300,8 +304,12 @@ async function saveDepositToDynamoDB(deposit) {
   try {
     const { PutCommand } = await import("@aws-sdk/client-dynamodb");
 
+    // Get stage from environment variable or default to 'dev'
+    const stage = process.env.STAGE || "dev";
+    const tableName = `tg-eth-wallet-bot-deposits-${stage}`;
+
     const command = new PutCommand({
-      TableName: "tg-eth-wallet-bot-deposits",
+      TableName: tableName,
       Item: {
         txHash: { S: deposit.txHash },
         token: { S: deposit.token },
