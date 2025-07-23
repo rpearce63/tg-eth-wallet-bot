@@ -11,7 +11,7 @@ provider:
   # Environment variables
   environment:
     BOT_MODE: once
-    BLOCKS_TO_SCAN: 5
+    BLOCKS_TO_SCAN: 20
     NODE_ENV: production
 
   # IAM role permissions
@@ -60,8 +60,8 @@ custom:
   # Environment-specific schedule settings
   scheduleSettings:
     dev:
-      frequent: ${env:DEV_FREQUENT_SCAN, 'false'} # Disable by default in dev
-      summary: ${env:DEV_SUMMARY_SCAN, 'false'} # Disable by default in dev
+      frequent: ${env:DEV_FREQUENT_SCAN, 'true'} # Enable by default in dev
+      summary: ${env:DEV_SUMMARY_SCAN, 'true'} # Enable by default in dev
     prod:
       frequent: ${env:PROD_FREQUENT_SCAN, 'true'} # Enable by default in prod
       summary: ${env:PROD_SUMMARY_SCAN, 'true'} # Enable by default in prod
@@ -77,7 +77,7 @@ functions:
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
-      BLOCKS_TO_SCAN: ${self:custom.blocksToScan}
+      BLOCKS_TO_SCAN: 20
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
 
