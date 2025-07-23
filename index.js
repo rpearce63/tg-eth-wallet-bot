@@ -672,41 +672,51 @@ async function processBlock(blockNumber) {
 
     // Process ERC-20 transfers
     for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
-      const contract = new ethers.Contract(address, ERC20_ABI, provider);
-      const filter = contract.filters.Transfer(null, null);
-      const events = await contract.queryFilter(
-        filter,
-        blockNumber,
-        blockNumber
-      );
+      try {
+        const contract = new ethers.Contract(address, ERC20_ABI, provider);
+        const filter = contract.filters.Transfer(null, null);
+        const events = await contract.queryFilter(
+          filter,
+          blockNumber,
+          blockNumber
+        );
 
-      for (const event of events) {
-        const { from, to, value } = event.args;
-        if (to && MONITORED_ADDRESSES.includes(to.toLowerCase())) {
-          const amount = ethers.formatUnits(value, decimals);
-          const wasNewDeposit = await logDeposit({
-            token: symbol,
-            amount,
-            from,
-            to,
-            txHash: event.log.transactionHash,
-          });
+        for (const event of events) {
+          const { from, to, value } = event.args;
+          if (to && MONITORED_ADDRESSES.includes(to.toLowerCase())) {
+            const amount = ethers.formatUnits(value, decimals);
+            const txHash = event.transactionHash || event.log?.transactionHash;
 
-          if (wasNewDeposit) {
-            await sendDepositMessage(
-              symbol,
+            if (!txHash) {
+              console.warn(
+                `[Warning] No transaction hash found for ${symbol} event in block ${blockNumber}`
+              );
+              continue;
+            }
+
+            const wasNewDeposit = await logDeposit({
+              token: symbol,
               amount,
               from,
               to,
-              event.log.transactionHash
-            );
-            erc20Notifications++;
-            const now = new Date();
-            console.log(
-              `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to}`
-            );
+              txHash: txHash,
+            });
+
+            if (wasNewDeposit) {
+              await sendDepositMessage(symbol, amount, from, to, txHash);
+              erc20Notifications++;
+              const now = new Date();
+              console.log(
+                `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to}`
+              );
+            }
           }
         }
+      } catch (error) {
+        console.error(
+          `[Error] Failed to process ${symbol} events in block ${blockNumber}:`,
+          error
+        );
       }
     }
 
