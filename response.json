@@ -1,1 +1,1 @@
-{"errorType":"Runtime.ExitError","errorMessage":"RequestId: 593905d1-baae-45a0-8438-838a649a08f0 Error: Runtime exited without providing a reason"}
+{"statusCode":200,"body":"{\"message\":\"Summary sent successfully\",\"timestamp\":\"2025-07-23T23:04:39.276Z\"}"}

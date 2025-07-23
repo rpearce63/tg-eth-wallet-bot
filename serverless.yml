@@ -32,7 +32,8 @@ provider:
             - dynamodb:PutItem
             - dynamodb:Scan
             - dynamodb:Query
-          Resource: !GetAtt DepositsTable.Arn
+          Resource:
+            - "arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/tg-eth-wallet-bot-deposits-${sls:stage}"
 
   # Lambda configuration
   memorySize: 512
@@ -56,6 +57,8 @@ custom:
     frequent: rate(1 minute)
     moderate: rate(5 minutes)
     slow: rate(15 minutes)
+    # Summary schedule: every 3 hours starting at 9 PM CDT (2 AM UTC)
+    summary: cron(0 2,5,8,11,14,17,20,23 * * ? *)
 
   # Environment-specific schedule settings
   scheduleSettings:
@@ -158,9 +161,9 @@ functions:
       STAGE: ${sls:stage}
 
     events:
-      # Summary (every 3 hours)
+      # Summary (every 3 hours starting at 9 PM CDT / 2 AM UTC)
       - schedule:
-          rate: rate(3 hours)
+          rate: cron(0 2,5,8,11,14,17,20,23 * * ? *)
           enabled: ${self:custom.scheduleSettings.${sls:stage}.summary}
           name: ${self:service}-summary-${sls:stage}
 
@@ -252,20 +255,21 @@ package:
 resources:
   Resources:
     # DynamoDB table for deposit storage
-    DepositsTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        TableName: tg-eth-wallet-bot-deposits-${sls:stage}
-        BillingMode: PAY_PER_REQUEST
-        AttributeDefinitions:
-          - AttributeName: txHash
-            AttributeType: S
-        KeySchema:
-          - AttributeName: txHash
-            KeyType: HASH
-        TimeToLiveSpecification:
-          AttributeName: ttl
-          Enabled: false
+    # Note: Table already exists, removed to avoid deployment conflicts
+    # DepositsTable:
+    #   Type: AWS::DynamoDB::Table
+    #   Properties:
+    #     TableName: tg-eth-wallet-bot-deposits-${sls:stage}
+    #     BillingMode: PAY_PER_REQUEST
+    #     AttributeDefinitions:
+    #       - AttributeName: txHash
+    #         AttributeType: S
+    #     KeySchema:
+    #       - AttributeName: txHash
+    #         KeyType: HASH
+    #     TimeToLiveSpecification:
+    #       AttributeName: ttl
+    #       Enabled: false
 
     # S3 Bucket for static assets (GIFs, images)
     StaticAssetsBucket:
