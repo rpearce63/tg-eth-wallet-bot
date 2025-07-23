@@ -34,7 +34,7 @@ provider:
 # Custom variables
 custom:
   # Default values that can be overridden
-  telegramBotToken: ${env:TELEGRAM_BOT_TOKEN, 'your-bot-token-here'}
+  telegramBotToken: ${env:TELEGRAM_BOT_TOKEN, '5560564745:AAGItPTaoQQyxxnm7bAavxofMKN3z4ieAM0'}
   # Chat IDs for different environments
   telegramChatId:
     dev: ${env:TELEGRAM_CHAT_ID_DEV, '-1002545365231'} # Test chat for dev
