@@ -17,6 +17,8 @@
     "deploy:dev:off": "npm run prepare-data && DEV_FREQUENT_SCAN=false DEV_SUMMARY_SCAN=false serverless deploy --stage dev",
     "deploy:prod": "npm run prepare-data && serverless deploy --stage prod",
     "prepare-data": "node scripts/prepare-deployment.js",
+    "migrate-dev": "node scripts/migrate-to-dynamodb.js dev",
+    "migrate-prod": "node scripts/migrate-to-dynamodb.js prod",
     "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
     "upload-assets:prod": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-prod-assets/ --recursive",
     "deploy-full": "npm run deploy && npm run upload-assets"
