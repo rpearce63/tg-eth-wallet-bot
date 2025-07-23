@@ -701,8 +701,8 @@ async function scanBlocksForDeposits() {
 async function processBlock(blockNumber) {
   await initializeDB(); // Ensure db is initialized
   try {
-    // Add delay to respect RPC rate limits
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Reduced delay to respect RPC rate limits but be faster
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const block = await provider.getBlock(blockNumber, true);
     if (!block) return;
@@ -737,8 +737,8 @@ async function processBlock(blockNumber) {
     // Process ERC-20 transfers
     for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
       try {
-        // Add delay between contract queries to respect rate limits
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Reduced delay between contract queries to respect rate limits
+        await new Promise((resolve) => setTimeout(resolve, 25));
 
         const contract = new ethers.Contract(address, ERC20_ABI, provider);
         const filter = contract.filters.Transfer(null, null);

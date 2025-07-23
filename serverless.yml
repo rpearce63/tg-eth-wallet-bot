@@ -11,7 +11,7 @@ provider:
   # Environment variables
   environment:
     BOT_MODE: once
-    BLOCKS_TO_SCAN: 20
+    BLOCKS_TO_SCAN: 5
     NODE_ENV: production
 
   # IAM role permissions
@@ -36,7 +36,7 @@ provider:
 
   # Lambda configuration
   memorySize: 512
-  timeout: 25 # Reduced for API Gateway compatibility
+  timeout: 30 # API Gateway compatible timeout
 
 # Custom variables
 custom:
@@ -71,7 +71,7 @@ functions:
   walletMonitor:
     handler: lambda.handler
     description: Monitor Ethereum wallet for deposits and send Telegram notifications
-    timeout: 25 # API Gateway compatible
+    timeout: 30 # API Gateway compatible timeout
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
