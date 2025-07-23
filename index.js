@@ -699,7 +699,7 @@ async function setupOnceMode() {
 //   wsReconnects = 0;
 // }, 60 * 1000);
 
-// --- Configuration for hourly summary ---
+// --- Configuration for periodic summary ---
 const MARKETING_WALLET =
   "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3".toLowerCase();
 
@@ -805,7 +805,7 @@ async function sendHourlySummary() {
     return str;
   }
 
-  let msg = `<b>📊 Hourly Summary for Marketing Wallet</b>\n\n`;
+  let msg = `<b>📊 Marketing Wallet Summary</b>\n\n`;
   msg += `<b>Current Balances:</b>\n`;
   // ETH with USD value
   const ethUsd = Number(balances.ETH) * prices.eth;
@@ -859,7 +859,7 @@ async function sendHourlySummary() {
   });
 }
 
-// Schedule hourly summary
+// Schedule periodic summary
 setInterval(sendHourlySummary, 60 * 60 * 1000);
 // Optionally, send one immediately on startup
 //sendHourlySummary();

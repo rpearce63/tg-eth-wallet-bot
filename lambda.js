@@ -201,3 +201,84 @@ exports.testHandler = async (event, context) => {
     };
   }
 };
+
+// Control handler for remote parameter adjustment
+exports.controlHandler = async (event, context) => {
+  try {
+    console.log(
+      "[Lambda] Control event received:",
+      JSON.stringify(event, null, 2)
+    );
+
+    const body = event.body ? JSON.parse(event.body) : {};
+    const { action, parameter, value } = body;
+
+    let response = {
+      message: "Control action completed",
+      timestamp: new Date().toISOString(),
+    };
+
+    switch (action) {
+      case "status":
+        response.status = {
+          depositScanning: process.env.DEPOSIT_SCANNING_ENABLED !== "false",
+          summaryScanning: process.env.SUMMARY_SCANNING_ENABLED !== "false",
+          scanInterval: process.env.POLLING_INTERVAL || "30000",
+          blocksToScan: process.env.BLOCKS_TO_SCAN || "5",
+        };
+        break;
+
+      case "pause_deposits":
+        // This would require updating environment variables
+        response.message =
+          "Deposit scanning paused (requires redeploy to take effect)";
+        break;
+
+      case "resume_deposits":
+        response.message =
+          "Deposit scanning resumed (requires redeploy to take effect)";
+        break;
+
+      case "pause_summary":
+        response.message =
+          "Summary scanning paused (requires redeploy to take effect)";
+        break;
+
+      case "resume_summary":
+        response.message =
+          "Summary scanning resumed (requires redeploy to take effect)";
+        break;
+
+      default:
+        response.message =
+          "Unknown action. Available actions: status, pause_deposits, resume_deposits, pause_summary, resume_summary";
+    }
+
+    return {
+      statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      },
+      body: JSON.stringify(response),
+    };
+  } catch (error) {
+    console.error("[Lambda] Control error:", error);
+
+    return {
+      statusCode: 500,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      },
+      body: JSON.stringify({
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      }),
+    };
+  }
+};

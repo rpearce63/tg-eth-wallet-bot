@@ -194,6 +194,31 @@ functions:
           method: get
           cors: true
 
+  # Control function for remote parameter adjustment
+  control:
+    handler: lambda.controlHandler
+    description: Remote control endpoint for adjusting bot parameters
+    timeout: 25 # API Gateway compatible
+    environment:
+      TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
+      TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
+      ETHEREUM_RPC: ${self:custom.ethereumRpc}
+      BOT_MODE: once
+      BLOCKS_TO_SCAN: ${self:custom.blocksToScan}
+      POLLING_INTERVAL: ${self:custom.pollingInterval}
+
+    events:
+      # Manual trigger via HTTP
+      - http:
+          path: /control
+          method: post
+          cors: true
+
+      - http:
+          path: /control
+          method: get
+          cors: true
+
 # Package configuration
 package:
   patterns:
