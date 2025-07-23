@@ -42,6 +42,7 @@ custom:
   ethereumRpc: ${env:ETHEREUM_RPC, 'https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555'}
   pollingInterval: ${env:POLLING_INTERVAL, '30000'}
   blocksToScan: ${env:BLOCKS_TO_SCAN, '5'}
+  summaryInterval: ${env:SUMMARY_INTERVAL, '10800000'} # 3 hours in milliseconds
 
   # Schedule expressions
   schedules:
@@ -144,6 +145,7 @@ functions:
       BOT_MODE: once
       BLOCKS_TO_SCAN: 1 # Not scanning, just summary
       POLLING_INTERVAL: ${self:custom.pollingInterval}
+      SUMMARY_INTERVAL: ${self:custom.summaryInterval}
 
     events:
       # Summary (every 3 hours)

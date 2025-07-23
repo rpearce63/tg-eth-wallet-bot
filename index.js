@@ -859,8 +859,9 @@ async function sendHourlySummary() {
   });
 }
 
-// Schedule periodic summary
-setInterval(sendHourlySummary, 60 * 60 * 1000);
+// Schedule periodic summary (only for local development, Lambda uses CloudWatch Events)
+const SUMMARY_INTERVAL = process.env.SUMMARY_INTERVAL || 3 * 60 * 60 * 1000; // Default 3 hours
+setInterval(sendHourlySummary, SUMMARY_INTERVAL);
 // Optionally, send one immediately on startup
 //sendHourlySummary();
 
