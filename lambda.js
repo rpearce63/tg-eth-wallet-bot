@@ -56,7 +56,7 @@ exports.scheduledHandler = async (event, context) => {
 
   // Set environment for "once" mode with custom parameters
   process.env.BOT_MODE = "once";
-  process.env.BLOCKS_TO_SCAN = "10"; // Reduced for faster scanning
+  process.env.BLOCKS_TO_SCAN = "5"; // Reduced for faster scanning
 
   try {
     // Import the main bot functionality dynamically

@@ -26,7 +26,7 @@ const MODE = process.env.BOT_MODE || process.argv[2] || "websocket"; // "websock
 const POLLING_INTERVAL =
   parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 30000; // 30 seconds default
 const BLOCKS_TO_SCAN =
-  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 10; // Number of blocks to scan in polling mode
+  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 5; // Number of blocks to scan in polling mode
 
 console.log(
   `[Config] Mode: ${MODE}, Polling Interval: ${POLLING_INTERVAL}ms, Blocks to Scan: ${BLOCKS_TO_SCAN}`
@@ -701,8 +701,8 @@ async function scanBlocksForDeposits() {
 async function processBlock(blockNumber) {
   await initializeDB(); // Ensure db is initialized
   try {
-    // Reduced delay to respect RPC rate limits but be faster
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Minimal delay to respect RPC rate limits
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     const block = await provider.getBlock(blockNumber, true);
     if (!block) return;
@@ -737,8 +737,8 @@ async function processBlock(blockNumber) {
     // Process ERC-20 transfers
     for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
       try {
-        // Reduced delay between contract queries to respect rate limits
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        // Minimal delay between contract queries
+        await new Promise((resolve) => setTimeout(resolve, 5));
 
         const contract = new ethers.Contract(address, ERC20_ABI, provider);
         const filter = contract.filters.Transfer(null, null);
@@ -796,7 +796,10 @@ async function processBlock(blockNumber) {
   } catch (error) {
     // Check if it's an RPC rate limit error
     if (error.error && error.error.code === -32005) {
-      const retryDelay = parseInt(error.error.data?.try_again_in) || 2000;
+      const retryDelay = Math.min(
+        parseInt(error.error.data?.try_again_in) || 1000,
+        1000
+      );
       console.log(
         `[Rate Limit] RPC rate limit hit for block ${blockNumber}, retrying in ${retryDelay}ms`
       );
