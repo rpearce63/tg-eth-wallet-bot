@@ -56,7 +56,7 @@ exports.scheduledHandler = async (event, context) => {
 
   // Set environment for "once" mode with custom parameters
   process.env.BOT_MODE = "once";
-  process.env.BLOCKS_TO_SCAN = "5"; // Reduced for faster scanning
+  process.env.BLOCKS_TO_SCAN = "7"; // Optimized for 60-second intervals
 
   try {
     // Import the main bot functionality dynamically
@@ -245,8 +245,8 @@ exports.controlHandler = async (event, context) => {
         response.status = {
           depositScanning: process.env.DEPOSIT_SCANNING_ENABLED !== "false",
           summaryScanning: process.env.SUMMARY_SCANNING_ENABLED !== "false",
-          scanInterval: process.env.POLLING_INTERVAL || "30000",
-          blocksToScan: process.env.BLOCKS_TO_SCAN || "5",
+          scanInterval: process.env.POLLING_INTERVAL || "60000",
+          blocksToScan: process.env.BLOCKS_TO_SCAN || "7",
         };
         break;
 

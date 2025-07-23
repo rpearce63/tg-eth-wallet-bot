@@ -24,9 +24,9 @@ const MONITORED_ADDRESSES = [
 // Check for environment variables or command line arguments
 const MODE = process.env.BOT_MODE || process.argv[2] || "websocket"; // "websocket", "polling", or "once"
 const POLLING_INTERVAL =
-  parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 30000; // 30 seconds default
+  parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 60000; // 60 seconds default
 const BLOCKS_TO_SCAN =
-  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 5; // Number of blocks to scan in polling mode
+  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 7; // Number of blocks to scan in polling mode
 
 console.log(
   `[Config] Mode: ${MODE}, Polling Interval: ${POLLING_INTERVAL}ms, Blocks to Scan: ${BLOCKS_TO_SCAN}`

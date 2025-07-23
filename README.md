@@ -76,7 +76,7 @@ npm run once
 node index.js once
 
 # Custom block range
-node index.js once 30000 15  # 30 seconds, 15 blocks
+node index.js once 60000 7   # 60 seconds, 7 blocks
 
 # Using environment variable
 BOT_MODE=once BLOCKS_TO_SCAN=20 node index.js
@@ -85,17 +85,17 @@ BOT_MODE=once BLOCKS_TO_SCAN=20 node index.js
 ### Polling Mode (Interval-based)
 
 ```bash
-# Default polling (30 seconds, 10 blocks)
+# Default polling (60 seconds, 7 blocks)
 npm run polling
 
-# Fast polling (10 seconds, 5 blocks)
+# Fast polling (30 seconds, 5 blocks)
 npm run polling-fast
 
-# Slow polling (60 seconds, 20 blocks)
+# Slow polling (120 seconds, 10 blocks)
 npm run polling-slow
 
 # Custom configuration
-node index.js polling 15000 15  # 15 seconds, 15 blocks
+node index.js polling 30000 7   # 30 seconds, 7 blocks
 
 # Using environment variables
 BOT_MODE=polling POLLING_INTERVAL=20000 BLOCKS_TO_SCAN=8 node index.js

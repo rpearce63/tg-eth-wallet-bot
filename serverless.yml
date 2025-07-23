@@ -1,4 +1,4 @@
-service: tg-eth-wallet-bot
+service: tg-eth-wallet-bot-v2
 
 frameworkVersion: "3"
 
@@ -47,8 +47,8 @@ custom:
     dev: ${env:TELEGRAM_CHAT_ID_DEV, '-1002545365231'} # Test chat for dev
     prod: "-1002753827191" # Production chat (hardcoded)
   ethereumRpc: ${env:ETHEREUM_RPC, 'https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555'}
-  pollingInterval: ${env:POLLING_INTERVAL, '30000'}
-  blocksToScan: ${env:BLOCKS_TO_SCAN, '10'}
+  pollingInterval: ${env:POLLING_INTERVAL, '60000'}
+  blocksToScan: ${env:BLOCKS_TO_SCAN, '7'}
   summaryInterval: ${env:SUMMARY_INTERVAL, '10800000'} # 3 hours in milliseconds
 
   # Schedule expressions
@@ -77,7 +77,7 @@ functions:
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
-      BLOCKS_TO_SCAN: 5
+      BLOCKS_TO_SCAN: 7
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
 
@@ -121,7 +121,7 @@ functions:
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
-      BLOCKS_TO_SCAN: 5
+      BLOCKS_TO_SCAN: 7
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
 
