@@ -640,6 +640,9 @@ async function scanBlocksForDeposits() {
 async function processBlock(blockNumber) {
   await initializeDB(); // Ensure db is initialized
   try {
+    // Add delay to respect RPC rate limits
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
     const block = await provider.getBlock(blockNumber, true);
     if (!block) return;
 
@@ -673,6 +676,9 @@ async function processBlock(blockNumber) {
     // Process ERC-20 transfers
     for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
       try {
+        // Add delay between contract queries to respect rate limits
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
         const contract = new ethers.Contract(address, ERC20_ABI, provider);
         const filter = contract.filters.Transfer(null, null);
         const events = await contract.queryFilter(
@@ -727,7 +733,26 @@ async function processBlock(blockNumber) {
       );
     }
   } catch (error) {
-    console.error(`[Polling] Error processing block ${blockNumber}:`, error);
+    // Check if it's an RPC rate limit error
+    if (error.error && error.error.code === -32005) {
+      const retryDelay = parseInt(error.error.data?.try_again_in) || 2000;
+      console.log(
+        `[Rate Limit] RPC rate limit hit for block ${blockNumber}, retrying in ${retryDelay}ms`
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      // Retry once
+      try {
+        await processBlock(blockNumber);
+        return;
+      } catch (retryError) {
+        console.error(
+          `[Polling] Retry failed for block ${blockNumber}:`,
+          retryError
+        );
+      }
+    } else {
+      console.error(`[Polling] Error processing block ${blockNumber}:`, error);
+    }
   }
 }
 
