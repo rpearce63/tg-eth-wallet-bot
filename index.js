@@ -290,7 +290,18 @@ async function loadDepositsFromDynamoDB() {
     });
 
     const response = await dynamoClient.send(command);
-    return response.Items || [];
+
+    // Convert DynamoDB format to plain objects
+    const deposits = (response.Items || []).map((item) => ({
+      txHash: item.txHash?.S || "",
+      token: item.token?.S || "",
+      amount: item.amount?.S || "",
+      from: item.from?.S || "",
+      to: item.to?.S || "",
+      timestamp: parseInt(item.timestamp?.N || "0"),
+    }));
+
+    return deposits;
   } catch (error) {
     console.error("[DB] Error loading from DynamoDB:", error);
     return [];
@@ -857,7 +868,7 @@ async function sendHourlySummary() {
   }
 
   const deposits = db.data.deposits.filter(
-    (d) => d.to.toLowerCase() === MARKETING_WALLET
+    (d) => d.to && d.to.toLowerCase() === MARKETING_WALLET
   );
   const balances = await getMarketingWalletBalances();
   const prices = await fetchPrices();
