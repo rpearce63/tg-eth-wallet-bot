@@ -64,19 +64,42 @@ const TOKEN_ICONS = {
 
 // --- Token videos (MP4) ---
 const TOKEN_VIDEOS = {
-  ETH: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
-  USDC: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
-  USDT: "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+  ETH:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+  USDC:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+  USDT:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
   XIAOBAI:
-    "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.mp4",
 };
 
-// --- Token images ---
+// --- Token images (GIF fallback from same video) ---
 const TOKEN_IMAGES = {
-  ETH: "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif", // Ethereum animated
-  USDC: "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif", // USDC animated
-  USDT: "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif", // USDT animated
-  XIAOBAI: "https://media.giphy.com/media/3o7abKhOpu0NwenH3O/giphy.gif", // XIAOBAI animated
+  ETH:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+  USDC:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+  USDT:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+  XIAOBAI:
+    process.env.STAGE === "prod"
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
 };
 
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
