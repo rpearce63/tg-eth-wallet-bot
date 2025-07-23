@@ -146,11 +146,11 @@ functions:
       POLLING_INTERVAL: ${self:custom.pollingInterval}
 
     events:
-      # Hourly summary (every hour)
+      # Summary (every 3 hours)
       - schedule:
-          rate: rate(1 hour)
+          rate: rate(3 hours)
           enabled: ${self:custom.scheduleSettings.${sls:stage}.summary}
-          name: ${self:service}-hourly-summary-${sls:stage}
+          name: ${self:service}-summary-${sls:stage}
 
       # Daily summary (every 24 hours)
       - schedule:

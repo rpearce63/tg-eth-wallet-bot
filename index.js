@@ -6,7 +6,14 @@ const fetch = require("node-fetch");
 
 // --- Configuration ---
 const TELEGRAM_BOT_TOKEN = "5560564745:AAGItPTaoQQyxxnm7bAavxofMKN3z4ieAM0";
-const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || -1002545365231; // Use environment variable or fallback to test chat
+const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || -1002753827191; // Use environment variable or fallback to test chat
+
+// Debug: Log the chat ID being used
+console.log(
+  "[Config] TELEGRAM_CHAT environment variable:",
+  process.env.TELEGRAM_CHAT
+);
+console.log("[Config] Using chat ID:", TELEGRAM_CHAT);
 const ETHEREUM_RPC =
   "wss://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555";
 const MONITORED_ADDRESSES = [
