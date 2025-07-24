@@ -83,6 +83,9 @@ functions:
       BLOCKS_TO_SCAN: 7
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
+      TEST_MODE: ${env:TEST_MODE, 'false'}
+      MIRROR_TO_DEV: ${env:MIRROR_TO_DEV, 'false'}
+      DEV_CHAT_ID: ${self:custom.telegramChatId.dev}
 
     # API Gateway trigger
     events:
@@ -127,6 +130,9 @@ functions:
       BLOCKS_TO_SCAN: 7
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
+      TEST_MODE: ${env:TEST_MODE, 'false'}
+      MIRROR_TO_DEV: ${env:MIRROR_TO_DEV, 'false'}
+      DEV_CHAT_ID: ${self:custom.telegramChatId.dev}
 
     events:
       - schedule:
@@ -159,6 +165,9 @@ functions:
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       SUMMARY_INTERVAL: ${self:custom.summaryInterval}
       STAGE: ${sls:stage}
+      TEST_MODE: ${env:TEST_MODE, 'false'}
+      MIRROR_TO_DEV: ${env:MIRROR_TO_DEV, 'false'}
+      DEV_CHAT_ID: ${self:custom.telegramChatId.dev}
 
     events:
       # Summary (every 3 hours starting at 9 PM CDT / 2 AM UTC)
@@ -197,6 +206,9 @@ functions:
       BLOCKS_TO_SCAN: 1
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       TEST_AUTH_TOKEN: ${env:TEST_AUTH_TOKEN, 'REQUIRED_AUTH_TOKEN_NOT_SET'}
+      TEST_MODE: ${env:TEST_MODE, 'false'}
+      MIRROR_TO_DEV: ${env:MIRROR_TO_DEV, 'false'}
+      DEV_CHAT_ID: ${self:custom.telegramChatId.dev}
 
     events:
       # Manual trigger via HTTP
@@ -223,6 +235,9 @@ functions:
       BLOCKS_TO_SCAN: ${self:custom.blocksToScan}
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
+      TEST_MODE: ${env:TEST_MODE, 'false'}
+      MIRROR_TO_DEV: ${env:MIRROR_TO_DEV, 'false'}
+      DEV_CHAT_ID: ${self:custom.telegramChatId.dev}
 
     events:
       # Manual trigger via HTTP

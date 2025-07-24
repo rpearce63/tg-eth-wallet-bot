@@ -8,12 +8,32 @@ const fetch = require("node-fetch");
 const TELEGRAM_BOT_TOKEN = "5560564745:AAGItPTaoQQyxxnm7bAavxofMKN3z4ieAM0";
 const TELEGRAM_CHAT = process.env.TELEGRAM_CHAT || -1002753827191; // Use environment variable or fallback to test chat
 
+// Test mode and mirroring configuration for safe testing
+const isTestMode = process.env.TEST_MODE === "true";
+const MIRROR_TO_DEV = process.env.MIRROR_TO_DEV === "true";
+const DEV_CHAT_ID = process.env.DEV_CHAT_ID || -1002545365231;
+const targetChat = isTestMode ? DEV_CHAT_ID : TELEGRAM_CHAT;
+
+// Debug: Log test mode and mirroring configuration
+console.log("[Config] TEST_MODE environment variable:", process.env.TEST_MODE);
+console.log("[Config] TEST_MODE type:", typeof process.env.TEST_MODE);
+console.log("[Config] isTestMode:", isTestMode);
+console.log(
+  "[Config] MIRROR_TO_DEV environment variable:",
+  process.env.MIRROR_TO_DEV
+);
+console.log("[Config] MIRROR_TO_DEV type:", typeof process.env.MIRROR_TO_DEV);
+console.log("[Config] MIRROR_TO_DEV:", MIRROR_TO_DEV);
+
 // Debug: Log the chat ID being used
 console.log(
   "[Config] TELEGRAM_CHAT environment variable:",
   process.env.TELEGRAM_CHAT
 );
 console.log("[Config] Using chat ID:", TELEGRAM_CHAT);
+console.log("[Config] Test mode:", isTestMode);
+console.log("[Config] Target chat ID:", targetChat);
+console.log("[Config] Dev chat ID:", DEV_CHAT_ID);
 const ETHEREUM_RPC =
   "wss://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555";
 const MONITORED_ADDRESSES = [
@@ -439,6 +459,32 @@ function truncateAddress(addr) {
   return addr.slice(0, 6) + "..." + addr.slice(-4);
 }
 
+// Helper function to send messages with mirroring support
+async function sendMessageWithMirroring(chatId, message, options = {}) {
+  try {
+    // Send to primary chat
+    console.log(`[Mirror] Sending message to primary chat: ${chatId}`);
+    const result = await bot.sendMessage(chatId, message, options);
+
+    // Mirror to dev chat if enabled and not already in test mode
+    if (MIRROR_TO_DEV && !isTestMode && chatId !== DEV_CHAT_ID) {
+      console.log(`[Mirror] Mirroring message to dev chat: ${DEV_CHAT_ID}`);
+      try {
+        await bot.sendMessage(DEV_CHAT_ID, message, options);
+        console.log(`[Mirror] Message successfully mirrored to dev chat`);
+      } catch (mirrorError) {
+        console.error(`[Mirror] Error mirroring to dev chat:`, mirrorError);
+        // Don't fail the main message if mirroring fails
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`[Mirror] Error sending message:`, error);
+    throw error;
+  }
+}
+
 async function sendDepositMessage(token, amount, from, to, txHash) {
   await initializeDB(); // Ensure db is initialized
 
@@ -495,13 +541,39 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
 
   if (videoUrl) {
     try {
+      console.log(
+        `[Deposit] Sending ${token} deposit video to Telegram (${
+          isTestMode ? "TEST" : "PROD"
+        } mode)...`
+      );
+
+      // Construct the actual URL that would be called
+      const encodedMsg = encodeURIComponent(msg);
+      const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVideo?chat_id=${targetChat}&video=${encodeURIComponent(
+        videoUrl
+      )}&caption=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true&width=${
+        sizeConfig.width
+      }&height=${sizeConfig.height}&supports_streaming=true`;
+
+      console.log(
+        `[Deposit] Actual API URL (truncated for security):`,
+        actualUrl.substring(0, 100) + "..."
+      );
+      console.log(`[Deposit] Target Chat ID: ${targetChat}`);
+      console.log(`[Deposit] Video URL: ${videoUrl}`);
+      console.log(`[Deposit] Message length: ${msg.length} characters`);
+      console.log(
+        `[Deposit] Message content (first 200 chars):`,
+        msg.substring(0, 200) + "..."
+      );
+
       // Get token-specific size or use default
       const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
         width: IMAGE_SIZE_CONFIG.width,
         height: IMAGE_SIZE_CONFIG.height,
       };
 
-      await bot.sendVideo(TELEGRAM_CHAT, videoUrl, {
+      await bot.sendVideo(targetChat, videoUrl, {
         caption: msg,
         parse_mode: "HTML",
         disable_web_page_preview: true,
@@ -509,51 +581,277 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
         height: sizeConfig.height,
         supports_streaming: true, // Enable streaming for better performance
       });
+      console.log(
+        `[Deposit] ${token} deposit video sent successfully to ${
+          isTestMode ? "DEV" : "PROD"
+        } chat!`
+      );
+
+      // Mirror to dev chat if enabled and not in test mode
+      if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
+        console.log(`[Mirror] Mirroring ${token} deposit video to dev chat`);
+        try {
+          await bot.sendVideo(DEV_CHAT_ID, videoUrl, {
+            caption: msg,
+            parse_mode: "HTML",
+            disable_web_page_preview: true,
+            width: sizeConfig.width,
+            height: sizeConfig.height,
+            supports_streaming: true,
+          });
+          console.log(
+            `[Mirror] ${token} deposit video successfully mirrored to dev chat`
+          );
+        } catch (mirrorError) {
+          console.error(
+            `[Mirror] Error mirroring ${token} deposit video to dev chat:`,
+            mirrorError
+          );
+        }
+      }
     } catch (error) {
       console.log(
         `[Video] Failed to send video for ${token}, falling back to image`
       );
       // Fallback to image
       if (imageUrl) {
+        console.log(
+          `[Deposit] Falling back to ${token} deposit photo (${
+            isTestMode ? "TEST" : "PROD"
+          } mode)...`
+        );
+
+        // Construct the actual URL that would be called
+        const encodedMsg = encodeURIComponent(msg);
+        const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto?chat_id=${targetChat}&photo=${encodeURIComponent(
+          imageUrl
+        )}&caption=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true&width=${
+          sizeConfig.width
+        }&height=${sizeConfig.height}`;
+
+        console.log(
+          `[Deposit] Actual API URL (truncated for security):`,
+          actualUrl.substring(0, 100) + "..."
+        );
+        console.log(`[Deposit] Target Chat ID: ${targetChat}`);
+        console.log(`[Deposit] Image URL: ${imageUrl}`);
+        console.log(`[Deposit] Message length: ${msg.length} characters`);
+        console.log(
+          `[Deposit] Message content (first 200 chars):`,
+          msg.substring(0, 200) + "..."
+        );
+
         // Get token-specific size or use default
         const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
           width: IMAGE_SIZE_CONFIG.width,
           height: IMAGE_SIZE_CONFIG.height,
         };
 
-        await bot.sendPhoto(TELEGRAM_CHAT, imageUrl, {
+        await bot.sendPhoto(targetChat, imageUrl, {
           caption: msg,
           parse_mode: "HTML",
           disable_web_page_preview: true,
           width: sizeConfig.width,
           height: sizeConfig.height,
         });
+        console.log(
+          `[Deposit] ${token} deposit photo sent successfully to ${
+            isTestMode ? "DEV" : "PROD"
+          } chat!`
+        );
+
+        // Mirror to dev chat if enabled and not in test mode
+        if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
+          console.log(`[Mirror] Mirroring ${token} deposit photo to dev chat`);
+          try {
+            await bot.sendPhoto(DEV_CHAT_ID, imageUrl, {
+              caption: msg,
+              parse_mode: "HTML",
+              disable_web_page_preview: true,
+              width: sizeConfig.width,
+              height: sizeConfig.height,
+            });
+            console.log(
+              `[Mirror] ${token} deposit photo successfully mirrored to dev chat`
+            );
+          } catch (mirrorError) {
+            console.error(
+              `[Mirror] Error mirroring ${token} deposit photo to dev chat:`,
+              mirrorError
+            );
+          }
+        }
       } else {
-        await bot.sendMessage(TELEGRAM_CHAT, msg, {
+        console.log(
+          `[Deposit] Final fallback: sending ${token} deposit text message (${
+            isTestMode ? "TEST" : "PROD"
+          } mode)...`
+        );
+
+        // Construct the actual URL that would be called
+        const encodedMsg = encodeURIComponent(msg);
+        const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${targetChat}&text=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true`;
+
+        console.log(
+          `[Deposit] Actual API URL (truncated for security):`,
+          actualUrl.substring(0, 100) + "..."
+        );
+        console.log(`[Deposit] Target Chat ID: ${targetChat}`);
+        console.log(`[Deposit] Message length: ${msg.length} characters`);
+        console.log(
+          `[Deposit] Message content (first 200 chars):`,
+          msg.substring(0, 200) + "..."
+        );
+
+        await bot.sendMessage(targetChat, msg, {
           parse_mode: "HTML",
           disable_web_page_preview: true,
         });
+        console.log(
+          `[Deposit] ${token} deposit text message sent successfully to ${
+            isTestMode ? "DEV" : "PROD"
+          } chat!`
+        );
+
+        // Mirror to dev chat if enabled and not in test mode
+        if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
+          console.log(
+            `[Mirror] Mirroring ${token} deposit text message to dev chat`
+          );
+          try {
+            await bot.sendMessage(DEV_CHAT_ID, msg, {
+              parse_mode: "HTML",
+              disable_web_page_preview: true,
+            });
+            console.log(
+              `[Mirror] ${token} deposit text message successfully mirrored to dev chat`
+            );
+          } catch (mirrorError) {
+            console.error(
+              `[Mirror] Error mirroring ${token} deposit text message to dev chat:`,
+              mirrorError
+            );
+          }
+        }
       }
     }
   } else if (imageUrl) {
+    console.log(
+      `[Deposit] Sending ${token} deposit photo to Telegram (${
+        isTestMode ? "TEST" : "PROD"
+      } mode)...`
+    );
+
+    // Construct the actual URL that would be called
+    const encodedMsg = encodeURIComponent(msg);
+    const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto?chat_id=${targetChat}&photo=${encodeURIComponent(
+      imageUrl
+    )}&caption=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true&width=${
+      sizeConfig.width
+    }&height=${sizeConfig.height}`;
+
+    console.log(
+      `[Deposit] Actual API URL (truncated for security):`,
+      actualUrl.substring(0, 100) + "..."
+    );
+    console.log(`[Deposit] Target Chat ID: ${targetChat}`);
+    console.log(`[Deposit] Image URL: ${imageUrl}`);
+    console.log(`[Deposit] Message length: ${msg.length} characters`);
+    console.log(
+      `[Deposit] Message content (first 200 chars):`,
+      msg.substring(0, 200) + "..."
+    );
+
     // Get token-specific size or use default
     const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
       width: IMAGE_SIZE_CONFIG.width,
       height: IMAGE_SIZE_CONFIG.height,
     };
 
-    await bot.sendPhoto(TELEGRAM_CHAT, imageUrl, {
+    await bot.sendPhoto(targetChat, imageUrl, {
       caption: msg,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       width: sizeConfig.width,
       height: sizeConfig.height,
     });
+    console.log(
+      `[Deposit] ${token} deposit photo sent successfully to ${
+        isTestMode ? "DEV" : "PROD"
+      } chat!`
+    );
+
+    // Mirror to dev chat if enabled and not in test mode
+    if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
+      console.log(`[Mirror] Mirroring ${token} deposit photo to dev chat`);
+      try {
+        await bot.sendPhoto(DEV_CHAT_ID, imageUrl, {
+          caption: msg,
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+          width: sizeConfig.width,
+          height: sizeConfig.height,
+        });
+        console.log(
+          `[Mirror] ${token} deposit photo successfully mirrored to dev chat`
+        );
+      } catch (mirrorError) {
+        console.error(
+          `[Mirror] Error mirroring ${token} deposit photo to dev chat:`,
+          mirrorError
+        );
+      }
+    }
   } else {
-    await bot.sendMessage(TELEGRAM_CHAT, msg, {
+    console.log(
+      `[Deposit] Sending ${token} deposit message to Telegram (${
+        isTestMode ? "TEST" : "PROD"
+      } mode)...`
+    );
+
+    // Construct the actual URL that would be called
+    const encodedMsg = encodeURIComponent(msg);
+    const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${targetChat}&text=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true`;
+
+    console.log(
+      `[Deposit] Actual API URL (truncated for security):`,
+      actualUrl.substring(0, 100) + "..."
+    );
+    console.log(`[Deposit] Target Chat ID: ${targetChat}`);
+    console.log(`[Deposit] Message length: ${msg.length} characters`);
+    console.log(
+      `[Deposit] Message content (first 200 chars):`,
+      msg.substring(0, 200) + "..."
+    );
+
+    await bot.sendMessage(targetChat, msg, {
       parse_mode: "HTML",
       disable_web_page_preview: true,
     });
+    console.log(
+      `[Deposit] ${token} deposit message sent successfully to ${
+        isTestMode ? "DEV" : "PROD"
+      } chat!`
+    );
+
+    // Mirror to dev chat if enabled and not in test mode
+    if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
+      console.log(`[Mirror] Mirroring ${token} deposit message to dev chat`);
+      try {
+        await bot.sendMessage(DEV_CHAT_ID, msg, {
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        });
+        console.log(
+          `[Mirror] ${token} deposit message successfully mirrored to dev chat`
+        );
+      } catch (mirrorError) {
+        console.error(
+          `[Mirror] Error mirroring ${token} deposit message to dev chat:`,
+          mirrorError
+        );
+      }
+    }
   }
 }
 
@@ -972,12 +1270,36 @@ async function sendHourlySummary() {
   console.log("[Summary] Message preview (plain):", plainPreview + "...");
 
   try {
-    console.log("[Summary] Sending summary message to Telegram...");
-    await bot.sendMessage(TELEGRAM_CHAT, msg, {
+    console.log(
+      `[Summary] Sending summary message to Telegram (${
+        isTestMode ? "TEST" : "PROD"
+      } mode)...`
+    );
+
+    // Construct the actual URL that would be called
+    const encodedMsg = encodeURIComponent(msg);
+    const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${targetChat}&text=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true`;
+
+    console.log(
+      "[Summary] Actual API URL (truncated for security):",
+      actualUrl.substring(0, 100) + "..."
+    );
+    console.log("[Summary] Target Chat ID:", targetChat);
+    console.log("[Summary] Message length:", msg.length, "characters");
+    console.log(
+      "[Summary] Message content (first 200 chars):",
+      msg.substring(0, 200) + "..."
+    );
+
+    await sendMessageWithMirroring(targetChat, msg, {
       parse_mode: "HTML",
       disable_web_page_preview: true,
     });
-    console.log("[Summary] Summary message sent successfully!");
+    console.log(
+      `[Summary] Summary message sent successfully to ${
+        isTestMode ? "DEV" : "PROD"
+      } chat!`
+    );
   } catch (error) {
     console.error("[Summary] Error sending summary message:", error);
     console.error("[Summary] Error details:", {
