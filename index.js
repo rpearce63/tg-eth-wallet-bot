@@ -846,10 +846,12 @@ async function fetchPrices() {
 
 // Update sendHourlySummary to include USD values for ETH and XIAOBAI
 async function sendHourlySummary() {
+  console.log("[Summary] Starting hourly summary generation...");
   await initializeDB(); // Ensure db is initialized
 
   // Initialize provider if not already set (for Lambda calls)
   if (!provider) {
+    console.log("[Summary] Initializing provider for Lambda...");
     provider = new ethers.JsonRpcProvider(
       ETHEREUM_RPC.replace("wss://", "https://")
     );
@@ -858,11 +860,25 @@ async function sendHourlySummary() {
   const deposits = db.data.deposits.filter(
     (d) => d.to && d.to.toLowerCase() === MARKETING_WALLET
   );
+  console.log(
+    `[Summary] Found ${deposits.length} deposits for marketing wallet`
+  );
+
+  console.log("[Summary] Fetching wallet balances...");
   const balances = await getMarketingWalletBalances();
+  console.log("[Summary] Balances:", balances);
+
+  console.log("[Summary] Fetching token prices...");
   const prices = await fetchPrices();
+  console.log("[Summary] Prices:", prices);
+
+  console.log("[Summary] Calculating deposit totals...");
   const dayTotals = await sumDeposits(deposits, 24 * 60 * 60 * 1000);
   const weekTotals = await sumDeposits(deposits, 7 * 24 * 60 * 60 * 1000);
   const monthTotals = await sumDeposits(deposits, 30 * 24 * 60 * 60 * 1000);
+  console.log("[Summary] Day totals:", dayTotals);
+  console.log("[Summary] Week totals:", weekTotals);
+  console.log("[Summary] Month totals:", monthTotals);
 
   // Helper function to calculate total USD value for a time period
   function calculateTotalUsdValue(totals, prices) {
@@ -950,10 +966,28 @@ async function sendHourlySummary() {
   // Always add the XIAOBAI chart link
   msg += `<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
 
-  await bot.sendMessage(TELEGRAM_CHAT, msg, {
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-  });
+  console.log("[Summary] Generated message length:", msg.length, "characters");
+  // Log a simple preview without emojis to avoid encoding issues
+  const plainPreview = msg.replace(/[^\x00-\x7F]/g, "?").substring(0, 200);
+  console.log("[Summary] Message preview (plain):", plainPreview + "...");
+
+  try {
+    console.log("[Summary] Sending summary message to Telegram...");
+    await bot.sendMessage(TELEGRAM_CHAT, msg, {
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    });
+    console.log("[Summary] Summary message sent successfully!");
+  } catch (error) {
+    console.error("[Summary] Error sending summary message:", error);
+    console.error("[Summary] Error details:", {
+      message: error.message,
+      code: error.code,
+      statusCode: error.response?.statusCode,
+      statusMessage: error.response?.statusMessage,
+    });
+    throw error; // Re-throw to ensure Lambda knows about the failure
+  }
 }
 
 // Schedule periodic summary (only for local development, Lambda uses CloudWatch Events)

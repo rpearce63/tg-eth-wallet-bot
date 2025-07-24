@@ -18,6 +18,8 @@
     "deploy:prod": "serverless deploy --stage prod",
     "migrate-dev": "node scripts/migrate-to-dynamodb.js dev",
     "migrate-prod": "node scripts/migrate-to-dynamodb.js prod",
+    "import-etherscan-dev": "node scripts/import-etherscan-data.js dev",
+    "import-etherscan-prod": "node scripts/import-etherscan-data.js prod",
     "update-dev": "node scripts/update-from-etherscan.js dev",
     "update-prod": "node scripts/update-from-etherscan.js prod",
     "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
