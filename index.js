@@ -104,8 +104,10 @@ const RPC_CONFIG = {
   // Enable/disable rotation
   enableRotation: process.env.ENABLE_RPC_ROTATION !== "false", // Default to true
 
-  // Rotation intervals
-  rotationInterval: parseInt(process.env.RPC_ROTATION_INTERVAL) || 300000, // 5 minutes
+  // Round-robin rotation (for Lambda environments)
+  enableRoundRobin: process.env.ENABLE_ROUND_ROBIN !== "false", // Default to true
+
+  // Health check interval
   healthCheckInterval: parseInt(process.env.RPC_HEALTH_CHECK_INTERVAL) || 60000, // 1 minute
 
   // Provider-specific settings
@@ -136,12 +138,11 @@ class RPCProviderManager {
   constructor() {
     this.providers = [];
     this.currentProvider = null;
+    this.currentProviderIndex = 0; // For round-robin rotation
     this.providerStats = new Map();
     this.failedProviders = new Set();
-    this.rotationInterval = RPC_CONFIG.rotationInterval;
     this.healthCheckInterval = RPC_CONFIG.healthCheckInterval;
     this.healthCheckTimer = null;
-    this.rotationTimer = null;
   }
 
   // Initialize provider pool
@@ -171,11 +172,13 @@ class RPCProviderManager {
     // Start health monitoring if rotation is enabled
     if (RPC_CONFIG.enableRotation) {
       this.startHealthMonitoring();
-      this.startRotationTimer();
+      console.log(
+        `[RPC] Round-robin rotation enabled - will switch providers on each invocation`
+      );
     }
   }
 
-  // Get best available provider
+  // Get next provider using round-robin
   async getProvider(mode = "auto") {
     const availableProviders = this.providers.filter(
       (p) =>
@@ -191,23 +194,28 @@ class RPCProviderManager {
       return this.providers[0]; // Return first provider as fallback
     }
 
-    // Sort by priority and health score
-    const sortedProviders = availableProviders.sort((a, b) => {
-      const aStats = this.providerStats.get(a.name);
-      const bStats = this.providerStats.get(b.name);
+    // Round-robin: get next healthy provider
+    let attempts = 0;
+    while (attempts < availableProviders.length) {
+      const provider =
+        availableProviders[
+          this.currentProviderIndex % availableProviders.length
+        ];
+      this.currentProviderIndex =
+        (this.currentProviderIndex + 1) % availableProviders.length;
 
-      // Priority first
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority;
+      // Check if this provider is healthy
+      if (
+        !this.failedProviders.has(provider.name) &&
+        this.providerStats.get(provider.name)?.isHealthy
+      ) {
+        return provider;
       }
+      attempts++;
+    }
 
-      // Then by error rate
-      const aErrorRate = aStats.errors / Math.max(aStats.requests, 1);
-      const bErrorRate = bStats.errors / Math.max(bStats.requests, 1);
-      return aErrorRate - bErrorRate;
-    });
-
-    return sortedProviders[0];
+    // Fallback to first available provider
+    return availableProviders[0];
   }
 
   // Create provider instance
@@ -288,29 +296,16 @@ class RPCProviderManager {
     );
   }
 
-  // Start rotation timer
-  startRotationTimer() {
-    if (this.rotationTimer) {
-      clearInterval(this.rotationTimer);
-    }
-
-    this.rotationTimer = setInterval(() => {
-      this.rotateProvider();
-    }, this.rotationInterval);
-
-    console.log(
-      `[RPC] Rotation timer started (${this.rotationInterval}ms interval)`
-    );
-  }
-
-  // Rotate to next healthy provider
+  // Rotate to next healthy provider (for rate limit handling)
   async rotateProvider() {
     const currentName = this.currentProvider?.config?.name;
     const nextProvider = await this.getProvider();
 
     if (nextProvider && nextProvider.name !== currentName) {
       console.log(
-        `[RPC] Rotating from ${currentName || "none"} to ${nextProvider.name}`
+        `[RPC] Rotating from ${currentName || "none"} to ${
+          nextProvider.name
+        } (round-robin)`
       );
       await this.switchProvider(nextProvider);
     }
@@ -438,10 +433,6 @@ class RPCProviderManager {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
       this.healthCheckTimer = null;
-    }
-    if (this.rotationTimer) {
-      clearInterval(this.rotationTimer);
-      this.rotationTimer = null;
     }
   }
 }
@@ -652,14 +643,16 @@ console.log(
   `[Config] RPC Rotation: ${RPC_CONFIG.enableRotation ? "ENABLED" : "DISABLED"}`
 );
 console.log(
+  `[Config] RPC Round-Robin: ${
+    RPC_CONFIG.enableRoundRobin ? "ENABLED" : "DISABLED"
+  }`
+);
+console.log(
   `[Config] RPC Providers: ${
     RPC_PROVIDERS.primary.length +
     RPC_PROVIDERS.secondary.length +
     RPC_PROVIDERS.fallback.length
   } total`
-);
-console.log(
-  `[Config] RPC Rotation Interval: ${RPC_CONFIG.rotationInterval / 1000}s`
 );
 console.log(
   `[Config] RPC Health Check Interval: ${
