@@ -296,6 +296,9 @@ resources:
           BlockPublicPolicy: false
           IgnorePublicAcls: false
           RestrictPublicBuckets: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
         CorsConfiguration:
           CorsRules:
             - AllowedHeaders: ["*"]
@@ -306,6 +309,7 @@ resources:
     # S3 Bucket Policy for public read access
     StaticAssetsBucketPolicy:
       Type: AWS::S3::BucketPolicy
+      DependsOn: StaticAssetsBucket
       Properties:
         Bucket: !Ref StaticAssetsBucket
         PolicyDocument:
