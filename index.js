@@ -1638,66 +1638,169 @@ setInterval(sendHourlySummary, SUMMARY_INTERVAL);
 // Optionally, send one immediately on startup
 //sendHourlySummary();
 
+// Helper function to send test messages to DEV chat only
+async function sendTestMessageToDev(token, amount, from, to, txHash) {
+  console.log(`[Test] Sending test ${token} message to DEV chat only...`);
+
+  // Get token-specific size or use default
+  const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
+    width: IMAGE_SIZE_CONFIG.width,
+    height: IMAGE_SIZE_CONFIG.height,
+  };
+
+  // Fetch USD prices for tokens that aren't USD-pegged
+  let usdValue = null;
+  if (token !== "USDC" && token !== "USDT") {
+    try {
+      const prices = await fetchPrices();
+      if (token === "ETH") {
+        usdValue = Number(amount) * prices.eth;
+      } else if (token === "XIAOBAI") {
+        usdValue = Number(amount) * prices.xiaobai;
+      }
+    } catch (error) {
+      console.log(`[Price] Error fetching price for ${token}:`, error);
+    }
+  }
+
+  // Format amount with USD value if available
+  let formattedAmount = `<b>🟢 ${Number(amount).toLocaleString("en-US", {
+    maximumFractionDigits: 18,
+  })} ${token}</b>`;
+
+  if (usdValue && usdValue > 0) {
+    // Use more decimal places for very small values
+    let decimalPlaces = 2;
+    if (usdValue < 0.01) {
+      decimalPlaces = 6; // Show up to 6 decimal places for very small values
+    } else if (usdValue < 1) {
+      decimalPlaces = 4; // Show up to 4 decimal places for small values
+    }
+
+    formattedAmount += ` <b>($${usdValue.toLocaleString("en-US", {
+      maximumFractionDigits: decimalPlaces,
+    })})</b>`;
+  }
+
+  const fromLink = `<a href="https://etherscan.io/address/${from}">${truncateAddress(
+    from
+  )}</a>`;
+  const toLink = `<a href="https://etherscan.io/address/${to}">${truncateAddress(
+    to
+  )}</a>`;
+  let msg = `<b>🧪 TEST MESSAGE - New contribution detected!</b>\n\n<b>Token:</b> ${token}\n<b>Amount:</b> ${formattedAmount}\n\n<b>From:</b> ${fromLink}\n<b>To:</b> ${toLink}\n`;
+  if (txHash) {
+    msg += `\n<a href=\"https://etherscan.io/tx/${txHash}\">View Transaction</a>`;
+  }
+  // Always add the XIAOBAI chart link
+  msg += `\n<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
+
+  // Try to send video first, fallback to image, then text
+  const videoUrl = TOKEN_VIDEOS[token];
+  const imageUrl = TOKEN_IMAGES[token];
+
+  if (videoUrl) {
+    try {
+      console.log(`[Test] Sending ${token} test video to DEV chat...`);
+      await bot.sendVideo(DEV_CHAT_ID, videoUrl, {
+        caption: msg,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        width: sizeConfig.width,
+        height: sizeConfig.height,
+        supports_streaming: true,
+      });
+      console.log(`[Test] ${token} test video sent successfully to DEV chat!`);
+      return;
+    } catch (error) {
+      console.log(
+        `[Test] Failed to send video for ${token}, falling back to image`
+      );
+    }
+  }
+
+  if (imageUrl) {
+    try {
+      console.log(`[Test] Sending ${token} test photo to DEV chat...`);
+      await bot.sendPhoto(DEV_CHAT_ID, imageUrl, {
+        caption: msg,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        width: sizeConfig.width,
+        height: sizeConfig.height,
+      });
+      console.log(`[Test] ${token} test photo sent successfully to DEV chat!`);
+      return;
+    } catch (error) {
+      console.log(
+        `[Test] Failed to send photo for ${token}, falling back to text`
+      );
+    }
+  }
+
+  // Final fallback to text message
+  console.log(`[Test] Sending ${token} test text message to DEV chat...`);
+  await bot.sendMessage(DEV_CHAT_ID, msg, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+  });
+  console.log(
+    `[Test] ${token} test text message sent successfully to DEV chat!`
+  );
+}
+
 // Test functions for each token type
 async function sendTestEthMessage() {
-  console.log("[Test] Sending test ETH message...");
   try {
-    await sendDepositMessage(
+    await sendTestMessageToDev(
       "ETH",
       "0.05", // 0.05 ETH (~$150)
       "0x1111111111111111111111111111111111111111",
       MARKETING_WALLET,
       "0x3333333333333333333333333333333333333333333333333333333333333333"
     );
-    console.log("[Test] Test ETH message sent successfully!");
   } catch (error) {
     console.error("[Test] Error sending ETH test message:", error);
   }
 }
 
 async function sendTestUsdcMessage() {
-  console.log("[Test] Sending test USDC message...");
   try {
-    await sendDepositMessage(
+    await sendTestMessageToDev(
       "USDC",
       "150", // 150 USDC
       "0x1111111111111111111111111111111111111111",
       MARKETING_WALLET,
       "0x3333333333333333333333333333333333333333333333333333333333333333"
     );
-    console.log("[Test] Test USDC message sent successfully!");
   } catch (error) {
     console.error("[Test] Error sending USDC test message:", error);
   }
 }
 
 async function sendTestUsdtMessage() {
-  console.log("[Test] Sending test USDT message...");
   try {
-    await sendDepositMessage(
+    await sendTestMessageToDev(
       "USDT",
       "250", // 250 USDT
       "0x1111111111111111111111111111111111111111",
       MARKETING_WALLET,
       "0x3333333333333333333333333333333333333333333333333333333333333333"
     );
-    console.log("[Test] Test USDT message sent successfully!");
   } catch (error) {
     console.error("[Test] Error sending USDT test message:", error);
   }
 }
 
 async function sendTestXiaobaiMessage() {
-  console.log("[Test] Sending test XIAOBAI message...");
   try {
-    await sendDepositMessage(
+    await sendTestMessageToDev(
       "XIAOBAI",
       "50000000", // 50 million XIAOBAI tokens (~$7.50)
       "0x1111111111111111111111111111111111111111",
       MARKETING_WALLET,
       "0x3333333333333333333333333333333333333333333333333333333333333333"
     );
-    console.log("[Test] Test XIAOBAI message sent successfully!");
   } catch (error) {
     console.error("[Test] Error sending XIAOBAI test message:", error);
   }
@@ -1744,6 +1847,7 @@ module.exports = {
   logDeposit,
   isTransactionProcessed,
   sendHourlySummary,
+  sendTestMessageToDev,
   sendTestEthMessage,
   sendTestUsdcMessage,
   sendTestUsdtMessage,
