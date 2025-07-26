@@ -1944,6 +1944,15 @@ setInterval(sendHourlySummary, SUMMARY_INTERVAL);
 async function sendTestMessageToDev(token, amount, from, to, txHash) {
   console.log(`[Test] Sending test ${token} message to DEV chat only...`);
 
+  // Create a local bot instance for testing
+  console.log(
+    `[Test] Creating bot instance with token: ${
+      TELEGRAM_BOT_TOKEN ? "Set" : "NOT SET"
+    }`
+  );
+  const testBot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
+  console.log(`[Test] Bot instance created:`, testBot ? "Success" : "Failed");
+
   // Get token-specific size or use default
   const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
     width: IMAGE_SIZE_CONFIG.width,
@@ -2007,7 +2016,10 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
       console.log(`[Test] Sending ${token} test ${mediaType} to DEV chat...`);
 
       // Use sendAnimation for GIFs to preserve animation, sendPhoto for static images
-      const sendMethod = isGif ? bot.sendAnimation : bot.sendPhoto;
+      console.log(
+        `[Test] Checking bot methods - sendAnimation: ${typeof testBot.sendAnimation}, sendPhoto: ${typeof testBot.sendPhoto}`
+      );
+      const sendMethod = isGif ? testBot.sendAnimation : testBot.sendPhoto;
       const methodName = isGif ? "animation" : "photo";
 
       await sendMethod(DEV_CHAT_ID, imageUrl, {
@@ -2028,12 +2040,13 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
       console.log(
         `[Test] Failed to send ${mediaType} for ${token}, falling back to text`
       );
+      console.error(`[Test] ${mediaType} error details:`, error.message);
     }
   }
 
   // Final fallback to text message
   console.log(`[Test] Sending ${token} test text message to DEV chat...`);
-  await bot.sendMessage(DEV_CHAT_ID, msg, {
+  await testBot.sendMessage(DEV_CHAT_ID, msg, {
     parse_mode: "HTML",
     disable_web_page_preview: true,
   });
