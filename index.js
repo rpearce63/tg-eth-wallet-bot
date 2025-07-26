@@ -48,16 +48,7 @@ const RPC_PROVIDERS = {
       cost: "paid",
     },
   ],
-  secondary: [
-    {
-      name: "1RPC",
-      http: "https://1rpc.io/eth",
-      priority: 2,
-      rateLimit: { rps: 2, monthly: 25000 },
-      features: ["http"],
-      cost: "free",
-    },
-  ],
+  secondary: [],
   fallback: [
     {
       name: "Ethereum Foundation",
