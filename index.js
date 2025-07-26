@@ -604,7 +604,7 @@ const MODE = process.env.BOT_MODE || process.argv[2] || "websocket"; // "websock
 const POLLING_INTERVAL =
   parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 120000; // 120 seconds default (increased from 60s)
 const BLOCKS_TO_SCAN =
-  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 3; // Reduced from 7 to 3 blocks
+  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 10; // Optimized for 50% overlap between scans
 
 console.log(
   `[Config] Mode: ${MODE}, Polling Interval: ${POLLING_INTERVAL}ms, Blocks to Scan: ${BLOCKS_TO_SCAN}`
@@ -615,7 +615,7 @@ console.log(
 console.log(
   `[Config] Conservative settings: ${
     POLLING_INTERVAL / 1000
-  }s interval, ${BLOCKS_TO_SCAN} blocks per scan`
+  }s interval, ${BLOCKS_TO_SCAN} blocks per scan (50% overlap)`
 );
 console.log(
   `[Config] RPC Rotation: ${RPC_CONFIG.enableRotation ? "ENABLED" : "DISABLED"}`

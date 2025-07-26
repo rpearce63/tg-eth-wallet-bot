@@ -80,7 +80,7 @@ functions:
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
-      BLOCKS_TO_SCAN: 7
+      BLOCKS_TO_SCAN: 10
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
       TEST_MODE: ${env:TEST_MODE, 'false'}
@@ -127,7 +127,7 @@ functions:
       TELEGRAM_CHAT: ${self:custom.telegramChatId.${sls:stage}}
       ETHEREUM_RPC: ${self:custom.ethereumRpc}
       BOT_MODE: once
-      BLOCKS_TO_SCAN: 7
+      BLOCKS_TO_SCAN: 10
       POLLING_INTERVAL: ${self:custom.pollingInterval}
       STAGE: ${sls:stage}
       TEST_MODE: ${env:TEST_MODE, 'false'}
