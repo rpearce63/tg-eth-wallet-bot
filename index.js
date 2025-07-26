@@ -1997,45 +1997,36 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
   // Always add the XIAOBAI chart link
   msg += `\n<a href=\"https://www.dextools.io/app/en/token/xiaobaictoeth?t=1753120925113\">View Chart</a>`;
 
-  // Try to send video first, fallback to image, then text
-  const videoUrl = TOKEN_VIDEOS[token];
+  // Send animated GIF (optimized for Telegram notifications)
   const imageUrl = TOKEN_IMAGES[token];
-
-  if (videoUrl) {
-    try {
-      console.log(`[Test] Sending ${token} test video to DEV chat...`);
-      await bot.sendVideo(DEV_CHAT_ID, videoUrl, {
-        caption: msg,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-        width: sizeConfig.width,
-        height: sizeConfig.height,
-        supports_streaming: true,
-      });
-      console.log(`[Test] ${token} test video sent successfully to DEV chat!`);
-      return;
-    } catch (error) {
-      console.log(
-        `[Test] Failed to send video for ${token}, falling back to image`
-      );
-    }
-  }
 
   if (imageUrl) {
     try {
-      console.log(`[Test] Sending ${token} test photo to DEV chat...`);
-      await bot.sendPhoto(DEV_CHAT_ID, imageUrl, {
+      const isGif = imageUrl.toLowerCase().endsWith(".gif");
+      const mediaType = isGif ? "animation" : "photo";
+      console.log(`[Test] Sending ${token} test ${mediaType} to DEV chat...`);
+
+      // Use sendAnimation for GIFs to preserve animation, sendPhoto for static images
+      const sendMethod = isGif ? bot.sendAnimation : bot.sendPhoto;
+      const methodName = isGif ? "animation" : "photo";
+
+      await sendMethod(DEV_CHAT_ID, imageUrl, {
         caption: msg,
         parse_mode: "HTML",
         disable_web_page_preview: true,
         width: sizeConfig.width,
         height: sizeConfig.height,
       });
-      console.log(`[Test] ${token} test photo sent successfully to DEV chat!`);
+      console.log(
+        `[Test] ${token} test ${methodName} sent successfully to DEV chat!`
+      );
       return;
     } catch (error) {
+      const mediaType = imageUrl.toLowerCase().endsWith(".gif")
+        ? "animation"
+        : "photo";
       console.log(
-        `[Test] Failed to send photo for ${token}, falling back to text`
+        `[Test] Failed to send ${mediaType} for ${token}, falling back to text`
       );
     }
   }
