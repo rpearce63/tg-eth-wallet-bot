@@ -104,7 +104,7 @@ if (RPC_CONFIG.customProviders.length > 0) {
       name: `Custom-${index + 1}`,
       http: url,
       priority: 1,
-      rateLimit: { rps: 5, monthly: 100000 },
+      rateLimit: { rps: 5, monthly: 10000 },
       features: ["http"],
       cost: "custom",
     }))
@@ -876,8 +876,6 @@ async function logDeposit({ token, amount, from, to, txHash }) {
   if (to.toLowerCase() !== MARKETING_WALLET)
     return { shouldSend: false, reason: "not_marketing_wallet" };
 
-  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
-
   // Check for duplicate transaction hash
   const isDuplicate = db.data.deposits.some(
     (deposit) => deposit.txHash === txHash
@@ -888,6 +886,14 @@ async function logDeposit({ token, amount, from, to, txHash }) {
     return { shouldSend: false, reason: "duplicate" };
   }
 
+  // Return success without saving to database yet
+  return { shouldSend: true, reason: "new_deposit" };
+}
+
+// New function to save deposit to database after successful message sending
+async function saveDepositToDatabase({ token, amount, from, to, txHash }) {
+  await initializeDB(); // Ensure db is initialized
+
   const deposit = {
     token,
     amount,
@@ -897,20 +903,18 @@ async function logDeposit({ token, amount, from, to, txHash }) {
     timestamp: Date.now(),
   };
 
+  const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
+
   if (isLambda) {
     // Save to DynamoDB in Lambda environment
     const saved = await saveDepositToDynamoDB(deposit);
     if (saved) {
       db.data.deposits.push(deposit);
       console.log(`[DB] Saved deposit to DynamoDB: ${txHash}`);
-      return { shouldSend: true, reason: "new_deposit" };
+      return true;
     } else {
       console.error(`[DB] Failed to save deposit to DynamoDB: ${txHash}`);
-      // Still send the message even if database save fails
-      console.log(
-        `[DB] Will still send notification despite database error: ${txHash}`
-      );
-      return { shouldSend: true, reason: "new_deposit_db_error" };
+      return false;
     }
   } else {
     // Save to local file in development
@@ -918,18 +922,58 @@ async function logDeposit({ token, amount, from, to, txHash }) {
       await db.read();
       db.data.deposits.push(deposit);
       await db.write();
-      return { shouldSend: true, reason: "new_deposit" };
+      console.log(`[DB] Saved deposit to local file: ${txHash}`);
+      return true;
     } catch (error) {
       console.error(
         `[DB] Failed to save deposit to local file: ${txHash}`,
         error
       );
-      // Still send the message even if file save fails
-      console.log(
-        `[DB] Will still send notification despite file save error: ${txHash}`
-      );
-      return { shouldSend: true, reason: "new_deposit_file_error" };
+      return false;
     }
+  }
+}
+
+// New function to process deposit with message sending and database saving
+async function processDeposit({ token, amount, from, to, txHash }) {
+  // First check if we should process this deposit
+  const depositResult = await logDeposit({ token, amount, from, to, txHash });
+
+  if (!depositResult.shouldSend) {
+    return { success: false, reason: depositResult.reason };
+  }
+
+  try {
+    // Try to send the message first
+    await sendDepositMessage(token, amount, from, to, txHash);
+
+    // Only save to database if message was sent successfully
+    const saved = await saveDepositToDatabase({
+      token,
+      amount,
+      from,
+      to,
+      txHash,
+    });
+
+    if (saved) {
+      console.log(
+        `[Process] Successfully processed and saved deposit: ${txHash}`
+      );
+      return { success: true, reason: "message_sent_and_saved" };
+    } else {
+      console.log(
+        `[Process] Message sent but failed to save to database: ${txHash}`
+      );
+      return { success: true, reason: "message_sent_db_failed" };
+    }
+  } catch (error) {
+    console.error(
+      `[Process] Failed to send message for deposit: ${txHash}`,
+      error
+    );
+    // Don't save to database if message failed - it will be retried on next scan
+    return { success: false, reason: "message_failed" };
   }
 }
 
@@ -1026,7 +1070,7 @@ async function setupProviderAndListeners() {
                 `[WebSocket] ✅ Found ${symbol} transfer in block ${blockNumber}: ${amount} ${symbol} from ${from} to ${to}`
               );
 
-              const depositResult = await logDeposit({
+              const processResult = await processDeposit({
                 token: symbol,
                 amount,
                 from,
@@ -1034,13 +1078,12 @@ async function setupProviderAndListeners() {
                 txHash: txHash,
               });
 
-              if (depositResult && depositResult.shouldSend) {
-                await sendDepositMessage(symbol, amount, from, to, txHash);
+              if (processResult && processResult.success) {
                 erc20Notifications++;
                 const now = new Date();
                 console.log(
                   `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to} (${
-                    depositResult.reason
+                    processResult.reason
                   })`
                 );
               }
@@ -1069,7 +1112,7 @@ async function setupProviderAndListeners() {
             `[WebSocket] ✅ Found ETH transfer in block ${blockNumber} (position ${i}): ${ethAmount} ETH from ${tx.from} to ${tx.to}`
           );
 
-          const depositResult = await logDeposit({
+          const processResult = await processDeposit({
             token: "ETH",
             amount: ethAmount,
             from: tx.from,
@@ -1077,8 +1120,7 @@ async function setupProviderAndListeners() {
             txHash: tx.hash,
           });
 
-          if (depositResult && depositResult.shouldSend) {
-            await sendDepositMessage("ETH", ethAmount, tx.from, tx.to, tx.hash);
+          if (processResult && processResult.success) {
             ethNotifications++;
             ethDeposits++;
           }
@@ -1106,7 +1148,7 @@ async function setupProviderAndListeners() {
         for (const monitored of MONITORED_ADDRESSES) {
           if (to && to.toLowerCase() === monitored) {
             const amount = ethers.formatUnits(value, decimals);
-            const depositResult = await logDeposit({
+            const processResult = await processDeposit({
               token: symbol,
               amount,
               from,
@@ -1114,18 +1156,13 @@ async function setupProviderAndListeners() {
               txHash: event.log.transactionHash,
             });
 
-            if (depositResult && depositResult.shouldSend) {
-              await sendDepositMessage(
-                symbol,
-                amount,
-                from,
-                to,
-                event.log.transactionHash
-              );
+            if (processResult && processResult.success) {
               erc20Notifications++;
               const now = new Date();
               console.log(
-                `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to}`
+                `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to} (${
+                  processResult.reason
+                })`
               );
             }
           }
@@ -1648,7 +1685,7 @@ async function processBlock(blockNumber) {
               `${logPrefix} ✅ Found ${symbol} transfer in block ${blockNumber}: ${amount} ${symbol} from ${from} to ${to}`
             );
 
-            const depositResult = await logDeposit({
+            const processResult = await processDeposit({
               token: symbol,
               amount,
               from,
@@ -1656,13 +1693,12 @@ async function processBlock(blockNumber) {
               txHash: txHash,
             });
 
-            if (depositResult && depositResult.shouldSend) {
-              await sendDepositMessage(symbol, amount, from, to, txHash);
+            if (processResult && processResult.success) {
               erc20Notifications++;
               const now = new Date();
               console.log(
                 `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to} (${
-                  depositResult.reason
+                  processResult.reason
                 })`
               );
             }
@@ -1692,7 +1728,7 @@ async function processBlock(blockNumber) {
           `${logPrefix} ✅ Found ETH transfer in block ${blockNumber} (position ${i}): ${ethAmount} ETH from ${tx.from} to ${tx.to}`
         );
 
-        const depositResult = await logDeposit({
+        const processResult = await processDeposit({
           token: "ETH",
           amount: ethAmount,
           from: tx.from,
@@ -1700,8 +1736,7 @@ async function processBlock(blockNumber) {
           txHash: tx.hash,
         });
 
-        if (depositResult && depositResult.shouldSend) {
-          await sendDepositMessage("ETH", ethAmount, tx.from, tx.to, tx.hash);
+        if (processResult && processResult.success) {
           ethNotifications++;
           ethDeposits++;
         }
@@ -2293,6 +2328,8 @@ module.exports = {
   setupPollingMode,
   sendDepositMessage,
   logDeposit,
+  saveDepositToDatabase,
+  processDeposit,
   isTransactionProcessed,
   sendHourlySummary,
   sendTestMessageToDev,
