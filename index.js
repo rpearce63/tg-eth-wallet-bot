@@ -1336,11 +1336,7 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
           msg.substring(0, 200) + "..."
         );
 
-        // Get token-specific size or use default
-        const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
-          width: IMAGE_SIZE_CONFIG.width,
-          height: IMAGE_SIZE_CONFIG.height,
-        };
+        // Use the sizeConfig already declared at the top of the function
 
         await bot.sendPhoto(targetChat, imageUrl, {
           caption: msg,
