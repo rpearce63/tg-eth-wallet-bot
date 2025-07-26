@@ -1259,7 +1259,7 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
   if (imageUrl) {
     try {
       const isGif = imageUrl.toLowerCase().endsWith(".gif");
-      const mediaType = isGif ? "animation" : "photo";
+      const mediaType = isGif ? "document" : "photo";
       console.log(
         `[Deposit] Sending ${token} deposit ${mediaType} to Telegram (${
           isTestMode ? "TEST" : "PROD"
@@ -1268,9 +1268,9 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
 
       // Construct the actual URL that would be called
       const encodedMsg = encodeURIComponent(msg);
-      const apiMethod = isGif ? "sendAnimation" : "sendPhoto";
+      const apiMethod = isGif ? "sendDocument" : "sendPhoto";
       const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${apiMethod}?chat_id=${targetChat}&${
-        isGif ? "animation" : "photo"
+        isGif ? "document" : "photo"
       }=${encodeURIComponent(
         imageUrl
       )}&caption=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true&width=${
@@ -1289,9 +1289,9 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
         msg.substring(0, 200) + "..."
       );
 
-      // Use sendAnimation for GIFs to preserve animation, sendPhoto for static images
-      const sendMethod = isGif ? bot.sendAnimation : bot.sendPhoto;
-      const methodName = isGif ? "animation" : "photo";
+      // Use sendDocument for GIFs (more reliable than sendAnimation), sendPhoto for static images
+      const sendMethod = isGif ? bot.sendDocument : bot.sendPhoto;
+      const methodName = isGif ? "document" : "photo";
 
       await sendMethod(targetChat, imageUrl, {
         caption: msg,
@@ -2011,12 +2011,12 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
   if (imageUrl) {
     try {
       const isGif = imageUrl.toLowerCase().endsWith(".gif");
-      const mediaType = isGif ? "animation" : "photo";
+      const mediaType = isGif ? "document" : "photo";
       console.log(`[Test] Sending ${token} test ${mediaType} to DEV chat...`);
 
-      // Use sendAnimation for GIFs to preserve animation, sendPhoto for static images
-      const sendMethod = isGif ? testBot.sendAnimation : testBot.sendPhoto;
-      const methodName = isGif ? "animation" : "photo";
+      // Use sendDocument for GIFs (more reliable than sendAnimation), sendPhoto for static images
+      const sendMethod = isGif ? testBot.sendDocument : testBot.sendPhoto;
+      const methodName = isGif ? "document" : "photo";
 
       await sendMethod(DEV_CHAT_ID, imageUrl, {
         caption: msg,
@@ -2031,7 +2031,7 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
       return;
     } catch (error) {
       const mediaType = imageUrl.toLowerCase().endsWith(".gif")
-        ? "animation"
+        ? "document"
         : "photo";
       console.log(
         `[Test] Failed to send ${mediaType} for ${token}, falling back to text`
