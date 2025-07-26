@@ -47,6 +47,14 @@ const RPC_PROVIDERS = {
       features: ["websocket", "archive"],
       cost: "paid",
     },
+    {
+      name: "QuickNode",
+      http: "https://late-hidden-river.quiknode.pro/1d06846dc558e409813ae371237433298f9d13ec/",
+      priority: 1,
+      rateLimit: { rps: 10, monthly: 1000000 },
+      features: ["http", "archive"],
+      cost: "paid",
+    },
   ],
   secondary: [],
   fallback: [
