@@ -34,8 +34,425 @@ console.log("[Config] Using chat ID:", TELEGRAM_CHAT);
 console.log("[Config] Test mode:", isTestMode);
 console.log("[Config] Target chat ID:", targetChat);
 console.log("[Config] Dev chat ID:", DEV_CHAT_ID);
+
+// --- RPC Provider Configuration ---
+const RPC_PROVIDERS = {
+  // Primary providers (paid/reliable)
+  primary: [
+    {
+      name: "Chainstack",
+      ws: "wss://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555",
+      http: "https://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555",
+      priority: 1,
+      rateLimit: { rps: 10, monthly: 1000000 },
+      features: ["websocket", "archive"],
+      cost: "paid",
+    },
+  ],
+
+  // Secondary providers (free/reliable)
+  secondary: [
+    {
+      name: "Cloudflare",
+      http: "https://cloudflare-eth.com",
+      priority: 2,
+      rateLimit: { rps: 5, monthly: 100000 },
+      features: ["http"],
+      cost: "free",
+    },
+    {
+      name: "Ankr",
+      http: "https://rpc.ankr.com/eth",
+      priority: 2,
+      rateLimit: { rps: 3, monthly: 50000 },
+      features: ["http"],
+      cost: "free",
+    },
+    {
+      name: "1RPC",
+      http: "https://1rpc.io/eth",
+      priority: 2,
+      rateLimit: { rps: 2, monthly: 25000 },
+      features: ["http"],
+      cost: "free",
+    },
+  ],
+
+  // Fallback providers (public/less reliable)
+  fallback: [
+    {
+      name: "Ethereum Foundation",
+      http: "https://eth.llamarpc.com",
+      priority: 3,
+      rateLimit: { rps: 1, monthly: 10000 },
+      features: ["http"],
+      cost: "free",
+    },
+    {
+      name: "MyCrypto",
+      http: "https://api.mycryptoapi.com/eth",
+      priority: 3,
+      rateLimit: { rps: 1, monthly: 5000 },
+      features: ["http"],
+      cost: "free",
+    },
+  ],
+};
+
+// RPC Configuration
+const RPC_CONFIG = {
+  // Enable/disable rotation
+  enableRotation: process.env.ENABLE_RPC_ROTATION !== "false", // Default to true
+
+  // Rotation intervals
+  rotationInterval: parseInt(process.env.RPC_ROTATION_INTERVAL) || 300000, // 5 minutes
+  healthCheckInterval: parseInt(process.env.RPC_HEALTH_CHECK_INTERVAL) || 60000, // 1 minute
+
+  // Provider-specific settings
+  maxConcurrentFailures: parseInt(process.env.RPC_MAX_FAILURES) || 3,
+
+  // Custom provider endpoints (comma-separated)
+  customProviders: process.env.CUSTOM_RPC_PROVIDERS
+    ? process.env.CUSTOM_RPC_PROVIDERS.split(",").map((p) => p.trim())
+    : [],
+};
+
+// Add custom providers if specified
+if (RPC_CONFIG.customProviders.length > 0) {
+  RPC_PROVIDERS.primary.push(
+    ...RPC_CONFIG.customProviders.map((url, index) => ({
+      name: `Custom-${index + 1}`,
+      http: url,
+      priority: 1,
+      rateLimit: { rps: 5, monthly: 100000 },
+      features: ["http"],
+      cost: "custom",
+    }))
+  );
+}
+
+// RPC Provider Manager Class
+class RPCProviderManager {
+  constructor() {
+    this.providers = [];
+    this.currentProvider = null;
+    this.providerStats = new Map();
+    this.failedProviders = new Set();
+    this.rotationInterval = RPC_CONFIG.rotationInterval;
+    this.healthCheckInterval = RPC_CONFIG.healthCheckInterval;
+    this.healthCheckTimer = null;
+    this.rotationTimer = null;
+  }
+
+  // Initialize provider pool
+  initialize() {
+    // Load all providers from configuration
+    this.providers = [
+      ...RPC_PROVIDERS.primary,
+      ...RPC_PROVIDERS.secondary,
+      ...RPC_PROVIDERS.fallback,
+    ];
+
+    console.log(`[RPC] Initialized with ${this.providers.length} providers`);
+
+    // Initialize stats for each provider
+    this.providers.forEach((provider) => {
+      this.providerStats.set(provider.name, {
+        requests: 0,
+        errors: 0,
+        lastUsed: 0,
+        lastError: 0,
+        avgResponseTime: 0,
+        isHealthy: true,
+        consecutiveFailures: 0,
+      });
+    });
+
+    // Start health monitoring if rotation is enabled
+    if (RPC_CONFIG.enableRotation) {
+      this.startHealthMonitoring();
+      this.startRotationTimer();
+    }
+  }
+
+  // Get best available provider
+  async getProvider(mode = "auto") {
+    const availableProviders = this.providers.filter(
+      (p) =>
+        !this.failedProviders.has(p.name) &&
+        this.providerStats.get(p.name)?.isHealthy
+    );
+
+    if (availableProviders.length === 0) {
+      console.error(
+        "[RPC] No healthy providers available, resetting failed providers"
+      );
+      this.failedProviders.clear();
+      return this.providers[0]; // Return first provider as fallback
+    }
+
+    // Sort by priority and health score
+    const sortedProviders = availableProviders.sort((a, b) => {
+      const aStats = this.providerStats.get(a.name);
+      const bStats = this.providerStats.get(b.name);
+
+      // Priority first
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+
+      // Then by error rate
+      const aErrorRate = aStats.errors / Math.max(aStats.requests, 1);
+      const bErrorRate = bStats.errors / Math.max(bStats.requests, 1);
+      return aErrorRate - bErrorRate;
+    });
+
+    return sortedProviders[0];
+  }
+
+  // Create provider instance
+  async createProvider(providerConfig, mode = "auto") {
+    if (mode === "websocket" && providerConfig.ws) {
+      return new ethers.WebSocketProvider(providerConfig.ws);
+    } else if (providerConfig.http) {
+      return new ethers.JsonRpcProvider(providerConfig.http);
+    } else {
+      throw new Error(`No suitable endpoint for mode: ${mode}`);
+    }
+  }
+
+  // Record provider usage
+  recordUsage(providerName, success = true, responseTime = 0) {
+    const stats = this.providerStats.get(providerName);
+    if (stats) {
+      stats.requests++;
+      stats.lastUsed = Date.now();
+      stats.avgResponseTime = (stats.avgResponseTime + responseTime) / 2;
+
+      if (!success) {
+        stats.errors++;
+        stats.lastError = Date.now();
+        stats.consecutiveFailures++;
+
+        // Mark as failed if too many consecutive failures
+        if (stats.consecutiveFailures >= RPC_CONFIG.maxConcurrentFailures) {
+          console.log(
+            `[RPC] Provider ${providerName} marked as failed due to ${stats.consecutiveFailures} consecutive failures`
+          );
+          this.failedProviders.add(providerName);
+        }
+      } else {
+        stats.consecutiveFailures = 0;
+      }
+    }
+  }
+
+  // Health check provider
+  async healthCheck(providerConfig) {
+    try {
+      const startTime = Date.now();
+      const provider = await this.createProvider(providerConfig, "http");
+      const blockNumber = await provider.getBlockNumber();
+      const responseTime = Date.now() - startTime;
+
+      this.recordUsage(providerConfig.name, true, responseTime);
+      return true;
+    } catch (error) {
+      this.recordUsage(providerConfig.name, false);
+      console.error(
+        `[RPC] Health check failed for ${providerConfig.name}:`,
+        error.message
+      );
+      return false;
+    }
+  }
+
+  // Start health monitoring
+  startHealthMonitoring() {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+    }
+
+    this.healthCheckTimer = setInterval(async () => {
+      for (const provider of this.providers) {
+        const isHealthy = await this.healthCheck(provider);
+        const stats = this.providerStats.get(provider.name);
+        if (stats) {
+          stats.isHealthy = isHealthy;
+        }
+      }
+    }, this.healthCheckInterval);
+
+    console.log(
+      `[RPC] Health monitoring started (${this.healthCheckInterval}ms interval)`
+    );
+  }
+
+  // Start rotation timer
+  startRotationTimer() {
+    if (this.rotationTimer) {
+      clearInterval(this.rotationTimer);
+    }
+
+    this.rotationTimer = setInterval(() => {
+      this.rotateProvider();
+    }, this.rotationInterval);
+
+    console.log(
+      `[RPC] Rotation timer started (${this.rotationInterval}ms interval)`
+    );
+  }
+
+  // Rotate to next healthy provider
+  async rotateProvider() {
+    const currentName = this.currentProvider?.config?.name;
+    const nextProvider = await this.getProvider();
+
+    if (nextProvider && nextProvider.name !== currentName) {
+      console.log(
+        `[RPC] Rotating from ${currentName || "none"} to ${nextProvider.name}`
+      );
+      await this.switchProvider(nextProvider);
+    }
+  }
+
+  // Switch to new provider
+  async switchProvider(providerConfig) {
+    try {
+      // Cleanup current provider
+      if (this.currentProvider) {
+        await this.cleanupProvider();
+      }
+
+      // Create new provider
+      const mode = this.getCurrentMode();
+      const newProvider = await this.createProvider(providerConfig, mode);
+
+      this.currentProvider = {
+        config: providerConfig,
+        instance: newProvider,
+      };
+
+      console.log(`[RPC] Switched to ${providerConfig.name} (${mode} mode)`);
+
+      // Reinitialize listeners if in WebSocket mode
+      if (mode === "websocket") {
+        this.setupWebSocketListeners(newProvider);
+      }
+    } catch (error) {
+      console.error(
+        `[RPC] Failed to switch to ${providerConfig.name}:`,
+        error.message
+      );
+      this.failedProviders.add(providerConfig.name);
+    }
+  }
+
+  // Get current mode
+  getCurrentMode() {
+    return MODE === "websocket" ? "websocket" : "http";
+  }
+
+  // Cleanup current provider
+  async cleanupProvider() {
+    if (this.currentProvider?.instance) {
+      try {
+        if (this.currentProvider.instance._websocket) {
+          this.currentProvider.instance._websocket.close();
+        }
+      } catch (error) {
+        console.error("[RPC] Error cleaning up provider:", error.message);
+      }
+    }
+  }
+
+  // Setup WebSocket listeners
+  setupWebSocketListeners(provider) {
+    if (provider._websocket) {
+      provider._websocket.on("open", () => {
+        console.log(
+          `[RPC] WebSocket connected to ${this.currentProvider.config.name}`
+        );
+      });
+
+      provider._websocket.on("close", () => {
+        console.log(
+          `[RPC] WebSocket disconnected from ${this.currentProvider.config.name}`
+        );
+        this.handleProviderFailure(this.currentProvider.config.name);
+      });
+
+      provider._websocket.on("error", (error) => {
+        console.error(
+          `[RPC] WebSocket error on ${this.currentProvider.config.name}:`,
+          error
+        );
+        this.handleProviderFailure(this.currentProvider.config.name);
+      });
+    }
+  }
+
+  // Handle provider failure
+  async handleProviderFailure(providerName) {
+    console.log(`[RPC] Provider ${providerName} failed, switching to backup`);
+    this.failedProviders.add(providerName);
+
+    // Try to switch to next available provider
+    const nextProvider = await this.getProvider();
+    if (nextProvider) {
+      await this.switchProvider(nextProvider);
+    }
+  }
+
+  // Get provider statistics
+  getStats() {
+    const stats = {};
+    for (const [name, data] of this.providerStats) {
+      stats[name] = {
+        ...data,
+        errorRate:
+          data.requests > 0
+            ? ((data.errors / data.requests) * 100).toFixed(2) + "%"
+            : "0%",
+        lastUsedAgo:
+          data.lastUsed > 0
+            ? Math.floor((Date.now() - data.lastUsed) / 1000) + "s ago"
+            : "never",
+        status: this.failedProviders.has(name)
+          ? "failed"
+          : data.isHealthy
+          ? "healthy"
+          : "unhealthy",
+      };
+    }
+    return stats;
+  }
+
+  // Get current provider instance
+  getCurrentProviderInstance() {
+    return this.currentProvider?.instance;
+  }
+
+  // Stop all timers
+  stop() {
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+    if (this.rotationTimer) {
+      clearInterval(this.rotationTimer);
+      this.rotationTimer = null;
+    }
+  }
+}
+
+// Initialize RPC manager
+const rpcManager = new RPCProviderManager();
+
+// Legacy ETHEREUM_RPC for backward compatibility (will be replaced by rpcManager)
 const ETHEREUM_RPC =
   "wss://ethereum-mainnet.core.chainstack.com/b6dbac3a0035889f4fe0ecba93817555";
+
 const MONITORED_ADDRESSES = [
   "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3".toLowerCase(),
 ];
@@ -69,7 +486,18 @@ async function rateLimitedRequest(requestFn, context = "unknown") {
       await enforceRateLimit();
 
       // Execute the request
+      const startTime = Date.now();
       const result = await requestFn();
+      const responseTime = Date.now() - startTime;
+
+      // Record successful usage with RPC manager
+      if (rpcManager.currentProvider) {
+        rpcManager.recordUsage(
+          rpcManager.currentProvider.config.name,
+          true,
+          responseTime
+        );
+      }
 
       // Reset error counter on success
       consecutiveErrors = 0;
@@ -83,14 +511,32 @@ async function rateLimitedRequest(requestFn, context = "unknown") {
       retryCount++;
       consecutiveErrors++;
 
+      // Record failed usage with RPC manager
+      if (rpcManager.currentProvider) {
+        rpcManager.recordUsage(rpcManager.currentProvider.config.name, false);
+      }
+
       // Check if it's a rate limit error
       if (isRateLimitError(error)) {
         const retryDelay = calculateRetryDelay(error, retryCount);
         console.log(
-          `[Rate Limit] ${context} hit rate limit (attempt ${retryCount}/${
+          `[Rate Limit] ${context} hit rate limit on ${
+            rpcManager.currentProvider?.config?.name || "unknown"
+          } (attempt ${retryCount}/${
             maxRetries + 1
           }), retrying in ${retryDelay}ms`
         );
+
+        // Try switching provider on rate limit
+        if (RPC_CONFIG.enableRotation) {
+          await rpcManager.rotateProvider();
+          provider = rpcManager.getCurrentProviderInstance();
+          console.log(
+            `[Rate Limit] Switched to ${
+              rpcManager.currentProvider?.config?.name || "unknown"
+            } provider`
+          );
+        }
 
         // Increase delay for next requests
         currentDelay = Math.min(
@@ -104,9 +550,9 @@ async function rateLimitedRequest(requestFn, context = "unknown") {
 
       // For non-rate-limit errors, log and potentially retry
       console.error(
-        `[Rate Limit] ${context} error (attempt ${retryCount}/${
-          maxRetries + 1
-        }):`,
+        `[Rate Limit] ${context} error on ${
+          rpcManager.currentProvider?.config?.name || "unknown"
+        } (attempt ${retryCount}/${maxRetries + 1}):`,
         error.message
       );
 
@@ -201,6 +647,24 @@ console.log(
   `[Config] Conservative settings: ${
     POLLING_INTERVAL / 1000
   }s interval, ${BLOCKS_TO_SCAN} blocks per scan`
+);
+console.log(
+  `[Config] RPC Rotation: ${RPC_CONFIG.enableRotation ? "ENABLED" : "DISABLED"}`
+);
+console.log(
+  `[Config] RPC Providers: ${
+    RPC_PROVIDERS.primary.length +
+    RPC_PROVIDERS.secondary.length +
+    RPC_PROVIDERS.fallback.length
+  } total`
+);
+console.log(
+  `[Config] RPC Rotation Interval: ${RPC_CONFIG.rotationInterval / 1000}s`
+);
+console.log(
+  `[Config] RPC Health Check Interval: ${
+    RPC_CONFIG.healthCheckInterval / 1000
+  }s`
 );
 
 // ERC-20 token contract addresses
@@ -504,28 +968,39 @@ async function isTransactionProcessed(txHash) {
   return db.data.deposits.some((deposit) => deposit.txHash === txHash);
 }
 
-function setupProviderAndListeners() {
-  provider = new ethers.WebSocketProvider(ETHEREUM_RPC);
+async function setupProviderAndListeners() {
+  // Initialize RPC manager and get WebSocket provider
+  await rpcManager.initialize();
+  const providerConfig = await rpcManager.getProvider("websocket");
+  await rpcManager.switchProvider(providerConfig);
+
+  // Use the RPC manager's current provider instance
+  provider = rpcManager.getCurrentProviderInstance();
 
   // --- WebSocket connection status logging ---
   if (provider._websocket) {
     provider._websocket.on("open", () => {
-      console.log("[WebSocket] Connection opened to Ethereum node.");
+      console.log(
+        `[WebSocket] Connection opened to ${rpcManager.currentProvider.config.name}.`
+      );
     });
     provider._websocket.on("close", (code, reason) => {
       console.log(
-        `[WebSocket] Connection closed. Code: ${code}, Reason: ${reason}`
+        `[WebSocket] Connection closed to ${rpcManager.currentProvider.config.name}. Code: ${code}, Reason: ${reason}`
       );
       wsReconnects++;
       cleanupListeners();
       // Attempt to reconnect after 5 seconds
-      setTimeout(() => {
+      setTimeout(async () => {
         console.log("[WebSocket] Attempting to reconnect...");
-        setupProviderAndListeners();
+        await setupProviderAndListeners();
       }, 5000);
     });
     provider._websocket.on("error", (err) => {
-      console.error("[WebSocket] Connection error:", err);
+      console.error(
+        `[WebSocket] Connection error on ${rpcManager.currentProvider.config.name}:`,
+        err
+      );
     });
   }
 
@@ -1288,18 +1763,21 @@ function setupWebSocketMode() {
   setupProviderAndListeners();
 }
 
-function setupPollingMode() {
+async function setupPollingMode() {
   console.log("[Mode] Setting up polling mode...");
-  provider = new ethers.JsonRpcProvider(
-    ETHEREUM_RPC.replace("wss://", "https://")
-  );
+
+  // Initialize RPC manager and get HTTP provider
+  await rpcManager.initialize();
+  const providerConfig = await rpcManager.getProvider("http");
+  await rpcManager.switchProvider(providerConfig);
+  provider = rpcManager.getCurrentProviderInstance();
 
   // Initialize lastProcessedBlock with rate limiting
   rateLimitedRequest(() => provider.getBlockNumber(), "getBlockNumber")
     .then((blockNumber) => {
       lastProcessedBlock = blockNumber - 1;
       console.log(
-        `[Polling] Initialized lastProcessedBlock to ${lastProcessedBlock}`
+        `[Polling] Initialized lastProcessedBlock to ${lastProcessedBlock} using ${rpcManager.currentProvider.config.name}`
       );
     })
     .catch((error) => {
@@ -1319,9 +1797,12 @@ function setupPollingMode() {
 
 async function setupOnceMode() {
   console.log("[Mode] Setting up 'once' mode...");
-  provider = new ethers.JsonRpcProvider(
-    ETHEREUM_RPC.replace("wss://", "https://")
-  );
+
+  // Initialize RPC manager and get HTTP provider
+  await rpcManager.initialize();
+  const providerConfig = await rpcManager.getProvider("http");
+  await rpcManager.switchProvider(providerConfig);
+  provider = rpcManager.getCurrentProviderInstance();
 
   await initializeDB(); // Ensure db is initialized
 
@@ -1854,6 +2335,9 @@ module.exports = {
   sendTestXiaobaiMessage,
   sendAllTestMessages,
   initializeDB,
+  // Export RPC manager and related functions
+  rpcManager,
+  getRPCStats: () => rpcManager.getStats(),
   // Export utility functions for testing
   truncateAddress,
   isRateLimitError,
@@ -1864,22 +2348,29 @@ module.exports = {
 
 // Main execution based on mode - only run if this file is executed directly
 if (require.main === module) {
-  if (MODE === "websocket") {
-    setupWebSocketMode();
-    console.log(
-      "Bot is running in WebSocket mode and listening for deposits via subscriptions..."
-    );
-  } else if (MODE === "polling") {
-    setupPollingMode();
-    console.log(
-      `Bot is running in polling mode, scanning every ${POLLING_INTERVAL}ms...`
-    );
-  } else if (MODE === "once") {
-    setupOnceMode();
-  } else {
-    console.error(
-      `[Main] Invalid mode: ${MODE}. Use 'websocket', 'polling', or 'once'. Exiting.`
-    );
-    process.exit(1);
-  }
+  (async () => {
+    try {
+      if (MODE === "websocket") {
+        await setupWebSocketMode();
+        console.log(
+          "Bot is running in WebSocket mode and listening for deposits via subscriptions..."
+        );
+      } else if (MODE === "polling") {
+        await setupPollingMode();
+        console.log(
+          `Bot is running in polling mode, scanning every ${POLLING_INTERVAL}ms...`
+        );
+      } else if (MODE === "once") {
+        await setupOnceMode();
+      } else {
+        console.error(
+          `[Main] Invalid mode: ${MODE}. Use 'websocket', 'polling', or 'once'. Exiting.`
+        );
+        process.exit(1);
+      }
+    } catch (error) {
+      console.error("[Main] Error during setup:", error);
+      process.exit(1);
+    }
+  })();
 }
