@@ -15,7 +15,6 @@
     "deploy:prod": "serverless deploy --stage prod",
     "deploy:dev:on": "DEV_FREQUENT_SCAN=true DEV_SUMMARY_SCAN=true serverless deploy --stage dev",
     "deploy:dev:off": "DEV_FREQUENT_SCAN=false DEV_SUMMARY_SCAN=false serverless deploy --stage dev",
-    "deploy:prod": "serverless deploy --stage prod",
     "migrate-dev": "node scripts/migrate-to-dynamodb.js dev",
     "migrate-prod": "node scripts/migrate-to-dynamodb.js prod",
     "import-etherscan-dev": "node scripts/import-etherscan-data.js dev",
@@ -25,12 +24,24 @@
     "upload-assets": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-dev-assets/ --recursive",
     "upload-assets:prod": "aws s3 cp ./assets/ s3://tg-eth-wallet-bot-prod-assets/ --recursive",
     "deploy-full": "npm run deploy && npm run upload-assets",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "TEST_VERBOSE=true jest",
+    "test:unit": "jest test/index.test.js",
     "test:images": "STAGE=dev node test-image-sizes.js",
     "test:images:only": "STAGE=dev node test-image-sizes.js image",
     "test:videos": "STAGE=dev node test-image-sizes.js video",
     "test:functions": "STAGE=dev node test-dev-functions.js",
     "test:functions:all": "STAGE=dev node test-dev-functions.js --all",
-    "test:all": "npm run test:images && npm run test:functions"
+    "test:all": "npm run test:images && npm run test:functions",
+    "predeploy": "npm test",
+    "deploy:mirror-on": "MIRROR_TO_DEV=true serverless deploy --stage dev && MIRROR_TO_DEV=true serverless deploy --stage prod",
+    "deploy:mirror-off": "MIRROR_TO_DEV=false serverless deploy --stage dev && MIRROR_TO_DEV=false serverless deploy --stage prod",
+    "deploy:dev:mirror-on": "MIRROR_TO_DEV=true serverless deploy --stage dev",
+    "deploy:dev:mirror-off": "MIRROR_TO_DEV=false serverless deploy --stage dev",
+    "deploy:prod:mirror-on": "MIRROR_TO_DEV=true serverless deploy --stage prod",
+    "deploy:prod:mirror-off": "MIRROR_TO_DEV=false serverless deploy --stage prod"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.450.0",
@@ -41,6 +52,7 @@
     "node-telegram-bot-api": "^0.61.0"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "serverless-dotenv-plugin": "^6.0.0"
   }
 }

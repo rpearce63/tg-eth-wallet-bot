@@ -24,12 +24,13 @@ exports.handler = async (event, context) => {
     const botFunctions = await import("./index.js");
 
     // Run the bot in "once" mode
-    await botFunctions.setupOnceMode();
+    const result = await botFunctions.setupOnceMode();
 
     return {
-      statusCode: 200,
+      statusCode: result.success ? 200 : 500,
       body: JSON.stringify({
-        message: "Scan completed successfully",
+        message: result.success ? "Scan completed successfully" : "Scan failed",
+        result: result,
         logs: logs,
         timestamp: new Date().toISOString(),
       }),
@@ -61,12 +62,15 @@ exports.scheduledHandler = async (event, context) => {
   try {
     // Import the main bot functionality dynamically
     const botFunctions = await import("./index.js");
-    await botFunctions.setupOnceMode();
+    const result = await botFunctions.setupOnceMode();
 
     return {
-      statusCode: 200,
+      statusCode: result.success ? 200 : 500,
       body: JSON.stringify({
-        message: "Scheduled scan completed successfully",
+        message: result.success
+          ? "Scheduled scan completed successfully"
+          : "Scheduled scan failed",
+        result: result,
         timestamp: new Date().toISOString(),
       }),
     };

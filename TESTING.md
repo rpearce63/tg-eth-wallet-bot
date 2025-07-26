@@ -1,179 +1,240 @@
-# Testing Guidelines
+# Testing Documentation
 
-## 🚨 **IMPORTANT: Dev Environment Only**
+This document describes the testing setup for the Telegram Ethereum Wallet Bot.
 
-All tests must be conducted in the **dev environment only**. Production testing is strictly prohibited.
+## Overview
 
-## ✅ **Environment Validation**
+The bot includes a comprehensive test suite to validate core functionality, data processing logic, and error handling. Tests are designed to run quickly and provide confidence that the code is working correctly before deployment.
 
-All test scripts include automatic environment validation:
+## Test Structure
+
+### Test Files
+
+- **`test/simple.test.js`** - Core logic tests that validate fundamental functionality
+- **`test/setup.js`** - Test environment setup and configuration
+- **`jest.config.js`** - Jest configuration
+
+### Test Categories
+
+1. **Address Utilities** - Tests for address formatting and validation
+2. **Rate Limiting Logic** - Tests for rate limit detection and retry logic
+3. **Transaction Processing** - Tests for ETH and ERC-20 transfer detection
+4. **ERC-20 Token Processing** - Tests for token amount formatting and event processing
+5. **Configuration Validation** - Tests for token and address configuration
+6. **Error Handling** - Tests for graceful handling of edge cases
+7. **Rate Limiting Configuration** - Tests for rate limit settings validation
+
+## Running Tests
+
+### Basic Test Commands
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (for development)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests with verbose output
+npm run test:verbose
+
+# Run only unit tests
+npm run test:unit
+```
+
+### Test Scripts
+
+- `npm test` - Run the test suite
+- `npm run test:watch` - Run tests in watch mode for development
+- `npm run test:coverage` - Generate coverage report
+- `npm run test:verbose` - Run tests with detailed logging
+- `npm run test:unit` - Run only unit tests
+
+## Test Coverage
+
+The tests cover the following key areas:
+
+### ✅ Core Logic Validation
+
+- **Address Truncation**: Validates that Ethereum addresses are properly formatted for display
+- **Rate Limit Detection**: Tests error detection for various rate limit scenarios
+- **Retry Logic**: Validates exponential backoff calculations
+- **Transaction Filtering**: Tests ETH transfer detection logic
+- **ERC-20 Processing**: Validates token amount formatting and event processing
+
+### ✅ Configuration Validation
+
+- **Token Configurations**: Validates token addresses and decimal places
+- **Monitored Addresses**: Ensures addresses are properly formatted
+- **Rate Limit Settings**: Validates rate limiting configuration
+
+### ✅ Error Handling
+
+- **Missing Data**: Tests graceful handling of null/undefined values
+- **Invalid Transactions**: Validates filtering of malformed transaction data
+- **Edge Cases**: Tests boundary conditions and unexpected inputs
+
+## Test Data
+
+### Mock Transactions
+
+Tests use realistic mock data that mirrors actual Ethereum transactions:
 
 ```javascript
-function validateEnvironment() {
-  const stage = process.env.STAGE || "dev";
-  if (stage === "prod") {
-    console.error("❌ ERROR: Tests cannot be run in production environment!");
-    process.exit(1);
-  }
-  console.log(`✅ Running tests in ${stage} environment`);
-}
-```
-
-## 🧪 **Available Test Scripts**
-
-### 1. Image Size Tests
-
-Test different image dimensions and formats:
-
-```bash
-# Test images only
-STAGE=dev node test-image-sizes.js image
-
-# Test videos only
-STAGE=dev node test-image-sizes.js video
-
-# Test both images and videos
-STAGE=dev node test-image-sizes.js
-```
-
-### 2. Bot Function Tests
-
-Test the main bot functions:
-
-```bash
-# Test individual token messages
-STAGE=dev node test-dev-functions.js
-
-# Test all messages at once
-STAGE=dev node test-dev-functions.js --all
-```
-
-### 3. Manual Testing via API
-
-Test via the deployed dev API endpoints:
-
-```bash
-# Health check
-curl https://YOUR-DEV-API-ENDPOINT/dev/health
-
-# Test endpoint (use with caution - sends test messages)
-# REQUIRES AUTHENTICATION: Set TEST_AUTH_TOKEN environment variable
-curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/test \
-  -H "X-Auth-Token: YOUR_AUTH_TOKEN"
-
-# Manual scan
-curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/scan
-```
-
-## 📱 **Dev Environment Details**
-
-- **Chat ID**: `-1002545365231` (Test chat)
-- **S3 Assets**: `tg-eth-wallet-bot-dev-assets`
-- **DynamoDB Table**: `tg-eth-wallet-bot-deposits-dev`
-- **API Endpoint**: `https://YOUR-DEV-API-ENDPOINT/dev/`
-
-## 🔧 **Test Configuration**
-
-### Image Size Configuration
-
-```javascript
-const IMAGE_SIZE_CONFIG = {
-  width: 400, // Default width
-  height: 300, // Default height
-  tokenSpecific: {
-    ETH: { width: 450, height: 338 },
-    XIAOBAI: { width: 500, height: 375 },
-  },
+const mockTransaction = {
+  hash: "0x1234567890abcdef",
+  from: "0x1111111111111111111111111111111111111111",
+  to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+  value: ethers.parseEther("0.1"),
 };
 ```
 
-### Test Data
+### Mock Events
 
-- **ETH**: 0.05 ETH (~$150)
-- **USDC**: 150 USDC
-- **USDT**: 250 USDT
-- **XIAOBAI**: 50,000,000 tokens (~$7.50)
+ERC-20 transfer events are mocked to test event processing:
 
-## 🔒 **Security Requirements**
+```javascript
+const mockEvent = {
+  args: {
+    from: "0x1111111111111111111111111111111111111111",
+    to: "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3",
+    value: "1000000", // 1 USDC
+  },
+  transactionHash: "0x1234567890abcdef",
+};
+```
 
-### Authentication for Test Endpoints
+## Pre-Deployment Testing
 
-The test endpoints require authentication to prevent unauthorized access:
+### Automated Testing
+
+The `predeploy` script automatically runs tests before deployment:
+
+```json
+{
+  "scripts": {
+    "predeploy": "npm test"
+  }
+}
+```
+
+This ensures that:
+
+- ✅ All core logic is validated
+- ✅ Configuration is correct
+- ✅ Error handling works properly
+- ✅ No syntax errors exist
+
+### Manual Testing
+
+Before deploying, you can also run:
 
 ```bash
-# Set your auth token (use a strong, random token)
-export TEST_AUTH_TOKEN="your-secure-random-token-here"
+# Run all tests
+npm test
 
-# Test with authentication
-curl -X POST https://YOUR-DEV-API-ENDPOINT/dev/test \
-  -H "X-Auth-Token: $TEST_AUTH_TOKEN"
+# Check for any linting issues
+npm run lint
+
+# Validate configuration
+npm run validate
 ```
+
+## Test Environment
 
 ### Environment Variables
 
-Set these environment variables before testing:
+Tests use a controlled environment with mock values:
 
-```bash
-export TEST_AUTH_TOKEN="your-secure-random-token"
-export STAGE="dev"
+```javascript
+process.env.TELEGRAM_BOT_TOKEN = "test-token";
+process.env.TELEGRAM_CHAT = "-1001234567890";
+process.env.DEV_CHAT_ID = "-1001234567891";
+process.env.TEST_MODE = "true";
+process.env.MIRROR_TO_DEV = "false";
+process.env.STAGE = "test";
 ```
 
-## 🚫 **What NOT to Test in Production**
+### Mocking Strategy
 
-- ❌ Image size variations
-- ❌ Bot function tests
-- ❌ Manual API calls
-- ❌ Media asset tests
-- ❌ Rate limiting tests
+- **External Dependencies**: Telegram API, Ethereum provider, and database are mocked
+- **Isolated Logic**: Core business logic is tested in isolation
+- **Realistic Data**: Tests use realistic transaction and event data
 
-## ✅ **What to Test in Dev**
+## Continuous Integration
 
-- ✅ All image sizes and formats
-- ✅ All token message types
-- ✅ API endpoints
-- ✅ Media asset delivery
-- ✅ Rate limiting behavior
-- ✅ Error handling
-- ✅ DynamoDB operations
+### GitHub Actions (Recommended)
 
-## 🔄 **Deployment Workflow**
+Add this to your `.github/workflows/test.yml`:
 
-1. **Develop** → Make changes locally
-2. **Test** → Run tests in dev environment
-3. **Deploy Dev** → `serverless deploy --stage dev`
-4. **Verify** → Test deployed dev functions
-5. **Deploy Prod** → `serverless deploy --stage prod` (only after dev verification)
-
-## 📋 **Pre-Deployment Checklist**
-
-- [ ] All tests pass in dev environment
-- [ ] No console errors in dev logs
-- [ ] Media assets load correctly
-- [ ] Messages send to dev chat only
-- [ ] DynamoDB operations work
-- [ ] API endpoints respond correctly
-
-## 🆘 **Troubleshooting**
-
-### Test Fails with Production Error
-
-```bash
-# Ensure you're in dev environment
-export STAGE=dev
-# or
-unset STAGE  # defaults to dev
+```yaml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: "18"
+      - run: npm ci
+      - run: npm test
 ```
 
-### Media Assets Not Loading
+### Pre-commit Hooks
+
+Consider adding pre-commit hooks to run tests automatically:
 
 ```bash
-# Check dev S3 bucket
-aws s3 ls s3://tg-eth-wallet-bot-dev-assets/ --region us-east-1
+# Install husky
+npm install --save-dev husky
+
+# Add pre-commit hook
+npx husky add .husky/pre-commit "npm test"
 ```
 
-### API Endpoints Not Responding
+## Troubleshooting
+
+### Common Issues
+
+1. **BigInt Serialization**: Fixed with custom `toJSON` method in test setup
+2. **Mock Dependencies**: External modules are properly mocked to avoid network calls
+3. **Environment Variables**: Test environment is isolated from production
+
+### Debugging Tests
 
 ```bash
-# Check dev deployment status
-serverless info --stage dev
+# Run tests with verbose output
+npm run test:verbose
+
+# Run specific test file
+npx jest test/simple.test.js
+
+# Run tests in debug mode
+node --inspect-brk node_modules/.bin/jest --runInBand
 ```
+
+## Best Practices
+
+### Writing Tests
+
+1. **Test Core Logic**: Focus on business logic rather than external dependencies
+2. **Use Realistic Data**: Mock data should mirror real-world scenarios
+3. **Test Edge Cases**: Include tests for error conditions and boundary cases
+4. **Keep Tests Fast**: Tests should run quickly for efficient development
+
+### Test Maintenance
+
+1. **Update Tests**: When adding new features, add corresponding tests
+2. **Review Coverage**: Regularly review test coverage and add tests for critical paths
+3. **Refactor Tests**: Keep tests clean and maintainable
+
+## Conclusion
+
+The test suite provides confidence that the core functionality works correctly before deployment. All tests should pass before deploying to production environments.
+
+For questions or issues with testing, refer to the Jest documentation or create an issue in the project repository.

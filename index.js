@@ -40,16 +40,167 @@ const MONITORED_ADDRESSES = [
   "0xe453b6ba7d8a4b402DFf9C1b2Da18226c5c2A9D3".toLowerCase(),
 ];
 
+// --- Rate Limiting Configuration ---
+const RATE_LIMIT_CONFIG = {
+  // Chainstack free tier: ~10 RPS, paid tiers: 50-200 RPS
+  maxRequestsPerSecond: process.env.MAX_RPS || 5, // Reduced from 8 to 5 for more conservative approach
+  minDelayBetweenRequests: 250, // Increased from 150ms to 250ms between requests (4 RPS)
+  maxDelayBetweenRequests: 2000, // Increased from 1000ms to 2000ms max delay
+  exponentialBackoffBase: 2,
+  maxRetries: 3,
+  retryDelayMultiplier: 1.5,
+};
+
+// --- Rate Limiting State ---
+let lastRequestTime = 0;
+let requestCount = 0;
+let requestWindowStart = Date.now();
+let consecutiveErrors = 0;
+let currentDelay = RATE_LIMIT_CONFIG.minDelayBetweenRequests;
+
+// --- Rate Limiting Functions ---
+async function rateLimitedRequest(requestFn, context = "unknown") {
+  const maxRetries = RATE_LIMIT_CONFIG.maxRetries;
+  let retryCount = 0;
+
+  while (retryCount <= maxRetries) {
+    try {
+      // Enforce rate limiting
+      await enforceRateLimit();
+
+      // Execute the request
+      const result = await requestFn();
+
+      // Reset error counter on success
+      consecutiveErrors = 0;
+      currentDelay = Math.max(
+        currentDelay / RATE_LIMIT_CONFIG.retryDelayMultiplier,
+        RATE_LIMIT_CONFIG.minDelayBetweenRequests
+      );
+
+      return result;
+    } catch (error) {
+      retryCount++;
+      consecutiveErrors++;
+
+      // Check if it's a rate limit error
+      if (isRateLimitError(error)) {
+        const retryDelay = calculateRetryDelay(error, retryCount);
+        console.log(
+          `[Rate Limit] ${context} hit rate limit (attempt ${retryCount}/${
+            maxRetries + 1
+          }), retrying in ${retryDelay}ms`
+        );
+
+        // Increase delay for next requests
+        currentDelay = Math.min(
+          currentDelay * RATE_LIMIT_CONFIG.exponentialBackoffBase,
+          RATE_LIMIT_CONFIG.maxDelayBetweenRequests
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        continue;
+      }
+
+      // For non-rate-limit errors, log and potentially retry
+      console.error(
+        `[Rate Limit] ${context} error (attempt ${retryCount}/${
+          maxRetries + 1
+        }):`,
+        error.message
+      );
+
+      if (retryCount <= maxRetries) {
+        const retryDelay =
+          currentDelay *
+          Math.pow(RATE_LIMIT_CONFIG.exponentialBackoffBase, retryCount);
+        console.log(`[Rate Limit] ${context} retrying in ${retryDelay}ms`);
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
+        continue;
+      }
+
+      // Max retries reached
+      throw error;
+    }
+  }
+}
+
+function isRateLimitError(error) {
+  return (
+    error.error?.code === -32005 ||
+    error.code === -32005 ||
+    (error.message && error.message.includes("RPS limit")) ||
+    (error.message && error.message.includes("rate limit"))
+  );
+}
+
+function calculateRetryDelay(error, retryCount) {
+  // Try to extract retry delay from error response
+  let baseDelay = 1000; // Default 1 second
+
+  if (error.error?.data?.try_again_in) {
+    const suggestedDelay = parseFloat(error.error.data.try_again_in);
+    if (!isNaN(suggestedDelay)) {
+      baseDelay = Math.max(suggestedDelay * 1000, baseDelay); // Convert to milliseconds
+    }
+  }
+
+  // Apply exponential backoff
+  return Math.min(
+    baseDelay * Math.pow(RATE_LIMIT_CONFIG.exponentialBackoffBase, retryCount),
+    RATE_LIMIT_CONFIG.maxDelayBetweenRequests
+  );
+}
+
+async function enforceRateLimit() {
+  const now = Date.now();
+
+  // Reset window if needed
+  if (now - requestWindowStart >= 1000) {
+    requestCount = 0;
+    requestWindowStart = now;
+  }
+
+  // Check if we're at the limit
+  if (requestCount >= RATE_LIMIT_CONFIG.maxRequestsPerSecond) {
+    const waitTime = 1000 - (now - requestWindowStart);
+    if (waitTime > 0) {
+      console.log(`[Rate Limit] Rate limit reached, waiting ${waitTime}ms`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+      return enforceRateLimit(); // Recursive call after waiting
+    }
+  }
+
+  // Enforce minimum delay between requests
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < currentDelay) {
+    const waitTime = currentDelay - timeSinceLastRequest;
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
+  }
+
+  // Update state
+  lastRequestTime = Date.now();
+  requestCount++;
+}
+
 // --- Mode Configuration ---
 // Check for environment variables or command line arguments
 const MODE = process.env.BOT_MODE || process.argv[2] || "websocket"; // "websocket", "polling", or "once"
 const POLLING_INTERVAL =
-  parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 60000; // 60 seconds default
+  parseInt(process.env.POLLING_INTERVAL) || parseInt(process.argv[3]) || 120000; // 120 seconds default (increased from 60s)
 const BLOCKS_TO_SCAN =
-  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 7; // Number of blocks to scan in polling mode
+  parseInt(process.env.BLOCKS_TO_SCAN) || parseInt(process.argv[4]) || 3; // Reduced from 7 to 3 blocks
 
 console.log(
   `[Config] Mode: ${MODE}, Polling Interval: ${POLLING_INTERVAL}ms, Blocks to Scan: ${BLOCKS_TO_SCAN}`
+);
+console.log(
+  `[Config] Rate Limit: ${RATE_LIMIT_CONFIG.maxRequestsPerSecond} RPS, Min Delay: ${RATE_LIMIT_CONFIG.minDelayBetweenRequests}ms`
+);
+console.log(
+  `[Config] Conservative settings: ${
+    POLLING_INTERVAL / 1000
+  }s interval, ${BLOCKS_TO_SCAN} blocks per scan`
 );
 
 // ERC-20 token contract addresses
@@ -224,7 +375,7 @@ async function loadDepositsFromDynamoDB() {
   if (!dynamoClient) return [];
 
   try {
-    const { ScanCommand } = await import("@aws-sdk/client-dynamodb");
+    const { ScanCommand } = await import("@aws-sdk/lib-dynamodb");
 
     // Get stage from environment variable or default to 'dev'
     const stage = process.env.STAGE || "dev";
@@ -236,14 +387,14 @@ async function loadDepositsFromDynamoDB() {
 
     const response = await dynamoClient.send(command);
 
-    // Convert DynamoDB format to plain objects
+    // DynamoDBDocumentClient returns plain objects, no conversion needed
     const deposits = (response.Items || []).map((item) => ({
-      txHash: item.txHash?.S || "",
-      token: item.token?.S || "",
-      amount: item.amount?.S || "",
-      from: item.from?.S || "",
-      to: item.to?.S || "",
-      timestamp: parseInt(item.timestamp?.N || "0"),
+      txHash: item.txHash || "",
+      token: item.token || "",
+      amount: item.amount || "",
+      from: item.from || "",
+      to: item.to || "",
+      timestamp: parseInt(item.timestamp || "0"),
     }));
 
     return deposits;
@@ -258,7 +409,7 @@ async function saveDepositToDynamoDB(deposit) {
   if (!dynamoClient) return false;
 
   try {
-    const { PutCommand } = await import("@aws-sdk/client-dynamodb");
+    const { PutCommand } = await import("@aws-sdk/lib-dynamodb");
 
     // Get stage from environment variable or default to 'dev'
     const stage = process.env.STAGE || "dev";
@@ -267,12 +418,12 @@ async function saveDepositToDynamoDB(deposit) {
     const command = new PutCommand({
       TableName: tableName,
       Item: {
-        txHash: { S: deposit.txHash },
-        token: { S: deposit.token },
-        amount: { S: deposit.amount },
-        from: { S: deposit.from },
-        to: { S: deposit.to },
-        timestamp: { N: deposit.timestamp.toString() },
+        txHash: deposit.txHash,
+        token: deposit.token,
+        amount: deposit.amount,
+        from: deposit.from,
+        to: deposit.to,
+        timestamp: deposit.timestamp,
       },
     });
 
@@ -287,7 +438,8 @@ async function saveDepositToDynamoDB(deposit) {
 // In logDeposit, only log if to === MARKETING_WALLET
 async function logDeposit({ token, amount, from, to, txHash }) {
   await initializeDB(); // Ensure db is initialized
-  if (to.toLowerCase() !== MARKETING_WALLET) return;
+  if (to.toLowerCase() !== MARKETING_WALLET)
+    return { shouldSend: false, reason: "not_marketing_wallet" };
 
   const isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME;
 
@@ -298,7 +450,7 @@ async function logDeposit({ token, amount, from, to, txHash }) {
 
   if (isDuplicate) {
     console.log(`[Duplicate] Skipping duplicate transaction: ${txHash}`);
-    return false; // Indicate this was a duplicate
+    return { shouldSend: false, reason: "duplicate" };
   }
 
   const deposit = {
@@ -316,18 +468,34 @@ async function logDeposit({ token, amount, from, to, txHash }) {
     if (saved) {
       db.data.deposits.push(deposit);
       console.log(`[DB] Saved deposit to DynamoDB: ${txHash}`);
+      return { shouldSend: true, reason: "new_deposit" };
     } else {
       console.error(`[DB] Failed to save deposit to DynamoDB: ${txHash}`);
-      return false;
+      // Still send the message even if database save fails
+      console.log(
+        `[DB] Will still send notification despite database error: ${txHash}`
+      );
+      return { shouldSend: true, reason: "new_deposit_db_error" };
     }
   } else {
     // Save to local file in development
-    await db.read();
-    db.data.deposits.push(deposit);
-    await db.write();
+    try {
+      await db.read();
+      db.data.deposits.push(deposit);
+      await db.write();
+      return { shouldSend: true, reason: "new_deposit" };
+    } catch (error) {
+      console.error(
+        `[DB] Failed to save deposit to local file: ${txHash}`,
+        error
+      );
+      // Still send the message even if file save fails
+      console.log(
+        `[DB] Will still send notification despite file save error: ${txHash}`
+      );
+      return { shouldSend: true, reason: "new_deposit_file_error" };
+    }
   }
-
-  return true; // Indicate this was a new deposit
 }
 
 // Helper function to check if a transaction hash already exists
@@ -364,10 +532,86 @@ function setupProviderAndListeners() {
   // --- Listen for ETH deposits in new blocks ---
   const ethListener = async (blockNumber) => {
     try {
+      // Get block with full transaction objects
       const block = await provider.getBlock(blockNumber, true);
       if (!block) return;
       let ethDeposits = 0;
-      for (const tx of block.transactions) {
+
+      // Use prefetchedTransactions for full transaction objects (ethers v6)
+      const transactions = block.prefetchedTransactions || [];
+      console.log(
+        `[WebSocket] Block ${blockNumber} has ${transactions.length} prefetched transactions`
+      );
+
+      // First, check for ERC-20 transfers (these are in logs, not direct transactions)
+      const monitoredAddress = MONITORED_ADDRESSES[0];
+
+      for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
+        try {
+          const contract = new ethers.Contract(address, ERC20_ABI, provider);
+          const filter = contract.filters.Transfer(null, monitoredAddress);
+
+          // Query events
+          const events = await contract.queryFilter(
+            filter,
+            blockNumber,
+            blockNumber
+          );
+
+          if (events.length > 0) {
+            console.log(
+              `[WebSocket] Found ${events.length} ${symbol} transfers to monitored address in block ${blockNumber}`
+            );
+
+            for (const event of events) {
+              const { from, to, value } = event.args;
+              const amount = ethers.formatUnits(value, decimals);
+              const txHash =
+                event.transactionHash || event.log?.transactionHash;
+
+              if (!txHash) {
+                console.warn(
+                  `[Warning] No transaction hash found for ${symbol} event in block ${blockNumber}`
+                );
+                continue;
+              }
+
+              console.log(
+                `[WebSocket] ✅ Found ${symbol} transfer in block ${blockNumber}: ${amount} ${symbol} from ${from} to ${to}`
+              );
+
+              const depositResult = await logDeposit({
+                token: symbol,
+                amount,
+                from,
+                to,
+                txHash: txHash,
+              });
+
+              if (depositResult && depositResult.shouldSend) {
+                await sendDepositMessage(symbol, amount, from, to, txHash);
+                erc20Notifications++;
+                const now = new Date();
+                console.log(
+                  `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to} (${
+                    depositResult.reason
+                  })`
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error(
+            `[Error] Failed to process ${symbol} events in block ${blockNumber}:`,
+            error.message
+          );
+        }
+      }
+
+      // Now check for ETH transfers using the prefetched transaction objects
+      for (let i = 0; i < transactions.length; i++) {
+        const tx = transactions[i];
+
         if (
           tx.to &&
           MONITORED_ADDRESSES.includes(tx.to.toLowerCase()) &&
@@ -375,7 +619,11 @@ function setupProviderAndListeners() {
           tx.value > 0
         ) {
           const ethAmount = ethers.formatEther(tx.value);
-          const wasNewDeposit = await logDeposit({
+          console.log(
+            `[WebSocket] ✅ Found ETH transfer in block ${blockNumber} (position ${i}): ${ethAmount} ETH from ${tx.from} to ${tx.to}`
+          );
+
+          const depositResult = await logDeposit({
             token: "ETH",
             amount: ethAmount,
             from: tx.from,
@@ -383,13 +631,14 @@ function setupProviderAndListeners() {
             txHash: tx.hash,
           });
 
-          if (wasNewDeposit) {
+          if (depositResult && depositResult.shouldSend) {
             await sendDepositMessage("ETH", ethAmount, tx.from, tx.to, tx.hash);
             ethNotifications++;
             ethDeposits++;
           }
         }
       }
+
       const now = new Date();
       if (ethDeposits > 0) {
         console.log(
@@ -411,7 +660,7 @@ function setupProviderAndListeners() {
         for (const monitored of MONITORED_ADDRESSES) {
           if (to && to.toLowerCase() === monitored) {
             const amount = ethers.formatUnits(value, decimals);
-            const wasNewDeposit = await logDeposit({
+            const depositResult = await logDeposit({
               token: symbol,
               amount,
               from,
@@ -419,7 +668,7 @@ function setupProviderAndListeners() {
               txHash: event.log.transactionHash,
             });
 
-            if (wasNewDeposit) {
+            if (depositResult && depositResult.shouldSend) {
               await sendDepositMessage(
                 symbol,
                 amount,
@@ -487,6 +736,12 @@ async function sendMessageWithMirroring(chatId, message, options = {}) {
 
 async function sendDepositMessage(token, amount, from, to, txHash) {
   await initializeDB(); // Ensure db is initialized
+
+  // Get token-specific size or use default (moved to top to fix scoping issue)
+  const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
+    width: IMAGE_SIZE_CONFIG.width,
+    height: IMAGE_SIZE_CONFIG.height,
+  };
 
   // Fetch USD prices for tokens that aren't USD-pegged
   let usdValue = null;
@@ -566,12 +821,6 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
         `[Deposit] Message content (first 200 chars):`,
         msg.substring(0, 200) + "..."
       );
-
-      // Get token-specific size or use default
-      const sizeConfig = IMAGE_SIZE_CONFIG.tokenSpecific[token] || {
-        width: IMAGE_SIZE_CONFIG.width,
-        height: IMAGE_SIZE_CONFIG.height,
-      };
 
       await bot.sendVideo(targetChat, videoUrl, {
         caption: msg,
@@ -865,10 +1114,23 @@ let lastProcessedBlock = 0;
 async function scanBlocksForDeposits() {
   await initializeDB(); // Ensure db is initialized
   try {
-    const currentBlock = await provider.getBlockNumber();
+    // Get current block number with rate limiting
+    const currentBlock = await rateLimitedRequest(
+      () => provider.getBlockNumber(),
+      "getBlockNumber"
+    );
+
     const startBlock = Math.max(
       lastProcessedBlock + 1,
       currentBlock - BLOCKS_TO_SCAN
+    );
+
+    // Use mode-aware logging
+    const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+    console.log(
+      `${logPrefix} Scanning blocks ${startBlock} to ${currentBlock} (${
+        currentBlock - startBlock + 1
+      } blocks)`
     );
 
     for (
@@ -881,63 +1143,54 @@ async function scanBlocksForDeposits() {
 
     lastProcessedBlock = currentBlock;
   } catch (error) {
-    console.error("[Polling] Error scanning blocks:", error);
+    const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+    console.error(`${logPrefix} Error scanning blocks:`, error.message);
   }
 }
 
 async function processBlock(blockNumber) {
   await initializeDB(); // Ensure db is initialized
-  try {
-    // Minimal delay to respect RPC rate limits
-    await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const block = await provider.getBlock(blockNumber, true);
+  try {
+    // Get block with full transaction objects
+    const block = await rateLimitedRequest(
+      () => provider.getBlock(blockNumber, true),
+      `getBlock(${blockNumber}, true)`
+    );
+
     if (!block) return;
 
     let ethDeposits = 0;
 
-    // Process ETH transactions
-    for (const tx of block.transactions) {
-      if (
-        tx.to &&
-        MONITORED_ADDRESSES.includes(tx.to.toLowerCase()) &&
-        tx.value &&
-        tx.value > 0
-      ) {
-        const ethAmount = ethers.formatEther(tx.value);
-        const wasNewDeposit = await logDeposit({
-          token: "ETH",
-          amount: ethAmount,
-          from: tx.from,
-          to: tx.to,
-          txHash: tx.hash,
-        });
+    // Use prefetchedTransactions for full transaction objects (ethers v6)
+    const transactions = block.prefetchedTransactions || [];
+    const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+    console.log(
+      `${logPrefix} Block ${blockNumber} has ${transactions.length} prefetched transactions`
+    );
 
-        if (wasNewDeposit) {
-          await sendDepositMessage("ETH", ethAmount, tx.from, tx.to, tx.hash);
-          ethNotifications++;
-          ethDeposits++;
-        }
-      }
-    }
+    // First, check for ERC-20 transfers (these are in logs, not direct transactions)
+    const monitoredAddress = MONITORED_ADDRESSES[0];
 
-    // Process ERC-20 transfers
     for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
       try {
-        // Minimal delay between contract queries
-        await new Promise((resolve) => setTimeout(resolve, 5));
-
         const contract = new ethers.Contract(address, ERC20_ABI, provider);
-        const filter = contract.filters.Transfer(null, null);
-        const events = await contract.queryFilter(
-          filter,
-          blockNumber,
-          blockNumber
+        const filter = contract.filters.Transfer(null, monitoredAddress);
+
+        // Query events with rate limiting
+        const events = await rateLimitedRequest(
+          () => contract.queryFilter(filter, blockNumber, blockNumber),
+          `${symbol} queryFilter(${blockNumber})`
         );
 
-        for (const event of events) {
-          const { from, to, value } = event.args;
-          if (to && MONITORED_ADDRESSES.includes(to.toLowerCase())) {
+        if (events.length > 0) {
+          const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+          console.log(
+            `${logPrefix} Found ${events.length} ${symbol} transfers to monitored address in block ${blockNumber}`
+          );
+
+          for (const event of events) {
+            const { from, to, value } = event.args;
             const amount = ethers.formatUnits(value, decimals);
             const txHash = event.transactionHash || event.log?.transactionHash;
 
@@ -948,7 +1201,12 @@ async function processBlock(blockNumber) {
               continue;
             }
 
-            const wasNewDeposit = await logDeposit({
+            const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+            console.log(
+              `${logPrefix} ✅ Found ${symbol} transfer in block ${blockNumber}: ${amount} ${symbol} from ${from} to ${to}`
+            );
+
+            const depositResult = await logDeposit({
               token: symbol,
               amount,
               from,
@@ -956,12 +1214,14 @@ async function processBlock(blockNumber) {
               txHash: txHash,
             });
 
-            if (wasNewDeposit) {
+            if (depositResult && depositResult.shouldSend) {
               await sendDepositMessage(symbol, amount, from, to, txHash);
               erc20Notifications++;
               const now = new Date();
               console.log(
-                `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to}`
+                `[${now.toISOString()}] ERC-20 ${symbol} deposit: ${amount} from ${from} to ${to} (${
+                  depositResult.reason
+                })`
               );
             }
           }
@@ -969,8 +1229,40 @@ async function processBlock(blockNumber) {
       } catch (error) {
         console.error(
           `[Error] Failed to process ${symbol} events in block ${blockNumber}:`,
-          error
+          error.message
         );
+      }
+    }
+
+    // Now check for ETH transfers using the prefetched transaction objects
+    for (let i = 0; i < transactions.length; i++) {
+      const tx = transactions[i];
+
+      if (
+        tx.to &&
+        MONITORED_ADDRESSES.includes(tx.to.toLowerCase()) &&
+        tx.value &&
+        tx.value > 0
+      ) {
+        const ethAmount = ethers.formatEther(tx.value);
+        const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+        console.log(
+          `${logPrefix} ✅ Found ETH transfer in block ${blockNumber} (position ${i}): ${ethAmount} ETH from ${tx.from} to ${tx.to}`
+        );
+
+        const depositResult = await logDeposit({
+          token: "ETH",
+          amount: ethAmount,
+          from: tx.from,
+          to: tx.to,
+          txHash: tx.hash,
+        });
+
+        if (depositResult && depositResult.shouldSend) {
+          await sendDepositMessage("ETH", ethAmount, tx.from, tx.to, tx.hash);
+          ethNotifications++;
+          ethDeposits++;
+        }
       }
     }
 
@@ -981,29 +1273,12 @@ async function processBlock(blockNumber) {
       );
     }
   } catch (error) {
-    // Check if it's an RPC rate limit error
-    if (error.error && error.error.code === -32005) {
-      const retryDelay = Math.min(
-        parseInt(error.error.data?.try_again_in) || 1000,
-        1000
-      );
-      console.log(
-        `[Rate Limit] RPC rate limit hit for block ${blockNumber}, retrying in ${retryDelay}ms`
-      );
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      // Retry once
-      try {
-        await processBlock(blockNumber);
-        return;
-      } catch (retryError) {
-        console.error(
-          `[Polling] Retry failed for block ${blockNumber}:`,
-          retryError
-        );
-      }
-    } else {
-      console.error(`[Polling] Error processing block ${blockNumber}:`, error);
-    }
+    const logPrefix = MODE === "once" ? "[Once]" : "[Polling]";
+    console.error(
+      `${logPrefix} Error processing block ${blockNumber}:`,
+      error.message
+    );
+    // Don't retry here - let the rate limiting system handle retries
   }
 }
 
@@ -1019,10 +1294,21 @@ function setupPollingMode() {
     ETHEREUM_RPC.replace("wss://", "https://")
   );
 
-  // Initialize lastProcessedBlock
-  provider.getBlockNumber().then((blockNumber) => {
-    lastProcessedBlock = blockNumber - 1;
-  });
+  // Initialize lastProcessedBlock with rate limiting
+  rateLimitedRequest(() => provider.getBlockNumber(), "getBlockNumber")
+    .then((blockNumber) => {
+      lastProcessedBlock = blockNumber - 1;
+      console.log(
+        `[Polling] Initialized lastProcessedBlock to ${lastProcessedBlock}`
+      );
+    })
+    .catch((error) => {
+      console.error(
+        "[Polling] Error initializing lastProcessedBlock:",
+        error.message
+      );
+      lastProcessedBlock = 0;
+    });
 
   // Start polling interval
   setInterval(scanBlocksForDeposits, POLLING_INTERVAL);
@@ -1040,8 +1326,11 @@ async function setupOnceMode() {
   await initializeDB(); // Ensure db is initialized
 
   try {
-    // Get current block number
-    const currentBlock = await provider.getBlockNumber();
+    // Get current block number with rate limiting
+    const currentBlock = await rateLimitedRequest(
+      () => provider.getBlockNumber(),
+      "getBlockNumber"
+    );
     lastProcessedBlock = currentBlock - BLOCKS_TO_SCAN;
 
     console.log(
@@ -1073,11 +1362,25 @@ async function setupOnceMode() {
       console.log(`[Once] ℹ️  No new deposits found in scanned blocks.`);
     }
 
-    console.log("[Once] Scan complete. Exiting.");
-    process.exit(0);
+    console.log("[Once] Scan complete.");
+
+    // Return result instead of calling process.exit()
+    return {
+      success: true,
+      ethFound,
+      erc20Found,
+      totalFound,
+      blocksScanned: BLOCKS_TO_SCAN,
+      scanRange: `${lastProcessedBlock + 1} to ${currentBlock}`,
+    };
   } catch (error) {
-    console.error("[Once] Error during scan:", error);
-    process.exit(1);
+    console.error("[Once] Error during scan:", error.message);
+
+    // Return error result instead of calling process.exit()
+    return {
+      success: false,
+      error: error.message,
+    };
   }
 }
 
@@ -1101,15 +1404,32 @@ const MARKETING_WALLET =
 async function getMarketingWalletBalances() {
   await initializeDB(); // Ensure db is initialized
   const balances = {};
-  // ETH balance
-  const ethBalance = await provider.getBalance(MARKETING_WALLET);
+
+  // ETH balance with rate limiting
+  const ethBalance = await rateLimitedRequest(
+    () => provider.getBalance(MARKETING_WALLET),
+    "getBalance"
+  );
   balances.ETH = ethers.formatEther(ethBalance);
-  // ERC-20 balances
+
+  // ERC-20 balances with rate limiting
   for (const [symbol, { address, decimals }] of Object.entries(TOKENS)) {
-    const contract = new ethers.Contract(address, ERC20_ABI, provider);
-    const bal = await contract.balanceOf(MARKETING_WALLET);
-    balances[symbol] = ethers.formatUnits(bal, decimals);
+    try {
+      const contract = new ethers.Contract(address, ERC20_ABI, provider);
+      const bal = await rateLimitedRequest(
+        () => contract.balanceOf(MARKETING_WALLET),
+        `${symbol} balanceOf`
+      );
+      balances[symbol] = ethers.formatUnits(bal, decimals);
+    } catch (error) {
+      console.error(
+        `[Balance] Error getting ${symbol} balance:`,
+        error.message
+      );
+      balances[symbol] = "0";
+    }
   }
+
   return balances;
 }
 
@@ -1429,6 +1749,13 @@ module.exports = {
   sendTestUsdtMessage,
   sendTestXiaobaiMessage,
   sendAllTestMessages,
+  initializeDB,
+  // Export utility functions for testing
+  truncateAddress,
+  isRateLimitError,
+  calculateRetryDelay,
+  rateLimitedRequest,
+  enforceRateLimit,
 };
 
 // Main execution based on mode - only run if this file is executed directly

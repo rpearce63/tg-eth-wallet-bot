@@ -70,10 +70,10 @@ custom:
       summary: ${env:PROD_SUMMARY_SCAN, 'true'} # Enable by default in prod
 
 functions:
-  # Main wallet monitor function
+  # Main wallet monitor function - PRIMARY SCANNER
   walletMonitor:
     handler: lambda.handler
-    description: Monitor Ethereum wallet for deposits and send Telegram notifications
+    description: Monitor Ethereum wallet for deposits and send Telegram notifications (Primary scanner - runs every minute)
     timeout: 30 # API Gateway compatible timeout
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
@@ -117,10 +117,10 @@ functions:
           enabled: false
           name: ${self:service}-slow-scan-${sls:stage}
 
-  # Alternative handler for scheduled events
+  # Alternative handler for scheduled events - DISABLED TO PREVENT DUPLICATE SCANNING
   scheduledMonitor:
     handler: lambda.scheduledHandler
-    description: Alternative handler optimized for scheduled CloudWatch Events
+    description: Alternative handler optimized for scheduled CloudWatch Events (Disabled - duplicate of walletMonitor)
     timeout: 300 # Longer timeout for scheduled events
     environment:
       TELEGRAM_BOT_TOKEN: ${self:custom.telegramBotToken}
@@ -137,7 +137,7 @@ functions:
     events:
       - schedule:
           rate: rate(10 minutes)
-          enabled: false
+          enabled: false # Disabled to prevent duplicate scanning with walletMonitor
           name: ${self:service}-alt-scan-${sls:stage}
 
   # Health check function
