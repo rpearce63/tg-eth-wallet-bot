@@ -692,20 +692,20 @@ const TOKEN_VIDEOS = {
 const TOKEN_IMAGES = {
   ETH:
     process.env.STAGE === "prod"
-      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
-      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif",
   USDC:
     process.env.STAGE === "prod"
-      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
-      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif",
   USDT:
     process.env.STAGE === "prod"
-      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
-      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif",
   XIAOBAI:
     process.env.STAGE === "prod"
-      ? "https://tg-eth-wallet-bot-prod-assets.s3.amazonaws.com/xiaobai_ani.gif"
-      : "https://tg-eth-wallet-bot-dev-assets.s3.amazonaws.com/xiaobai_ani.gif",
+      ? "https://tg-eth-wallet-bot-prod-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif"
+      : "https://tg-eth-wallet-bot-dev-assets.s3.us-east-1.amazonaws.com/xiaobai_ani.gif",
 };
 
 // --- Image size configuration ---
@@ -1347,8 +1347,10 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       );
       // Fallback to image
       if (imageUrl) {
+        const isGif = imageUrl.toLowerCase().endsWith(".gif");
+        const mediaType = isGif ? "animation" : "photo";
         console.log(
-          `[Deposit] Falling back to ${token} deposit photo (${
+          `[Deposit] Falling back to ${token} deposit ${mediaType} (${
             isTestMode ? "TEST" : "PROD"
           } mode)...`
         );
@@ -1373,9 +1375,11 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
           msg.substring(0, 200) + "..."
         );
 
-        // Use the sizeConfig already declared at the top of the function
+        // Use sendAnimation for GIFs to preserve animation, sendPhoto for static images
+        const sendMethod = isGif ? bot.sendAnimation : bot.sendPhoto;
+        const methodName = isGif ? "animation" : "photo";
 
-        await bot.sendPhoto(targetChat, imageUrl, {
+        await sendMethod(targetChat, imageUrl, {
           caption: msg,
           parse_mode: "HTML",
           disable_web_page_preview: true,
@@ -1383,16 +1387,18 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
           height: sizeConfig.height,
         });
         console.log(
-          `[Deposit] ${token} deposit photo sent successfully to ${
+          `[Deposit] ${token} deposit ${methodName} sent successfully to ${
             isTestMode ? "DEV" : "PROD"
           } chat!`
         );
 
         // Mirror to dev chat if enabled and not in test mode
         if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
-          console.log(`[Mirror] Mirroring ${token} deposit photo to dev chat`);
+          console.log(
+            `[Mirror] Mirroring ${token} deposit ${methodName} to dev chat`
+          );
           try {
-            await bot.sendPhoto(DEV_CHAT_ID, imageUrl, {
+            await sendMethod(DEV_CHAT_ID, imageUrl, {
               caption: msg,
               parse_mode: "HTML",
               disable_web_page_preview: true,
@@ -1400,11 +1406,11 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
               height: sizeConfig.height,
             });
             console.log(
-              `[Mirror] ${token} deposit photo successfully mirrored to dev chat`
+              `[Mirror] ${token} deposit ${methodName} successfully mirrored to dev chat`
             );
           } catch (mirrorError) {
             console.error(
-              `[Mirror] Error mirroring ${token} deposit photo to dev chat:`,
+              `[Mirror] Error mirroring ${token} deposit ${methodName} to dev chat:`,
               mirrorError
             );
           }
