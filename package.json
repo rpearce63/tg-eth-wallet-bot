@@ -36,6 +36,7 @@
     "test:functions:all": "STAGE=dev node test-dev-functions.js --all",
     "test:all": "npm run test:images && npm run test:functions",
     "test:rpc": "node scripts/test-rpc-rotation.js",
+    "discover:rpc": "node scripts/discover-rpc-providers.js",
     "predeploy": "npm test",
     "deploy:mirror-on": "MIRROR_TO_DEV=true serverless deploy --stage dev && MIRROR_TO_DEV=true serverless deploy --stage prod",
     "deploy:mirror-off": "MIRROR_TO_DEV=false serverless deploy --stage dev && MIRROR_TO_DEV=false serverless deploy --stage prod",

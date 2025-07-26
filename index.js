@@ -37,7 +37,6 @@ console.log("[Config] Dev chat ID:", DEV_CHAT_ID);
 
 // --- RPC Provider Configuration ---
 const RPC_PROVIDERS = {
-  // Primary providers (paid/reliable)
   primary: [
     {
       name: "Chainstack",
@@ -49,25 +48,7 @@ const RPC_PROVIDERS = {
       cost: "paid",
     },
   ],
-
-  // Secondary providers (free/reliable)
   secondary: [
-    {
-      name: "Cloudflare",
-      http: "https://cloudflare-eth.com",
-      priority: 2,
-      rateLimit: { rps: 5, monthly: 100000 },
-      features: ["http"],
-      cost: "free",
-    },
-    {
-      name: "Ankr",
-      http: "https://rpc.ankr.com/eth",
-      priority: 2,
-      rateLimit: { rps: 3, monthly: 50000 },
-      features: ["http"],
-      cost: "free",
-    },
     {
       name: "1RPC",
       http: "https://1rpc.io/eth",
@@ -77,8 +58,6 @@ const RPC_PROVIDERS = {
       cost: "free",
     },
   ],
-
-  // Fallback providers (public/less reliable)
   fallback: [
     {
       name: "Ethereum Foundation",
@@ -89,10 +68,10 @@ const RPC_PROVIDERS = {
       cost: "free",
     },
     {
-      name: "MyCrypto",
-      http: "https://api.mycryptoapi.com/eth",
+      name: "PublicNode",
+      http: "https://ethereum.publicnode.com",
       priority: 3,
-      rateLimit: { rps: 1, monthly: 5000 },
+      rateLimit: { rps: 1, monthly: 10000 },
       features: ["http"],
       cost: "free",
     },
