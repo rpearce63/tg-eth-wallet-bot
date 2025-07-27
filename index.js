@@ -1171,18 +1171,75 @@ function truncateAddress(addr) {
   return addr.slice(0, 6) + "..." + addr.slice(-4);
 }
 
+// --- Direct Telegram API helper function ---
+async function makeTelegramRequest(method, data) {
+  return new Promise((resolve, reject) => {
+    const https = require("https");
+    const postData = JSON.stringify(data);
+
+    const options = {
+      hostname: "api.telegram.org",
+      port: 443,
+      path: `/bot${TELEGRAM_BOT_TOKEN}/${method}`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let responseData = "";
+
+      res.on("data", (chunk) => {
+        responseData += chunk;
+      });
+
+      res.on("end", () => {
+        try {
+          const result = JSON.parse(responseData);
+          if (result.ok) {
+            resolve(result.result);
+          } else {
+            reject(new Error(`Telegram API error: ${result.description}`));
+          }
+        } catch (error) {
+          reject(new Error(`Failed to parse response: ${error.message}`));
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
 // Helper function to send messages with mirroring support
 async function sendMessageWithMirroring(chatId, message, options = {}) {
   try {
     // Send to primary chat
     console.log(`[Mirror] Sending message to primary chat: ${chatId}`);
-    const result = await bot.sendMessage(chatId, message, options);
+    const result = await makeTelegramRequest("sendMessage", {
+      chat_id: chatId,
+      text: message,
+      parse_mode: options.parse_mode || "HTML",
+      disable_web_page_preview: options.disable_web_page_preview || true,
+    });
 
     // Mirror to dev chat if enabled and not already in test mode
     if (MIRROR_TO_DEV && !isTestMode && chatId !== DEV_CHAT_ID) {
       console.log(`[Mirror] Mirroring message to dev chat: ${DEV_CHAT_ID}`);
       try {
-        await bot.sendMessage(DEV_CHAT_ID, message, options);
+        await makeTelegramRequest("sendMessage", {
+          chat_id: DEV_CHAT_ID,
+          text: message,
+          parse_mode: options.parse_mode || "HTML",
+          disable_web_page_preview: options.disable_web_page_preview || true,
+        });
         console.log(`[Mirror] Message successfully mirrored to dev chat`);
       } catch (mirrorError) {
         console.error(`[Mirror] Error mirroring to dev chat:`, mirrorError);
@@ -1269,9 +1326,8 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       // Construct the actual URL that would be called
       const encodedMsg = encodeURIComponent(msg);
       const apiMethod = isGif ? "sendDocument" : "sendPhoto";
-      const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${apiMethod}?chat_id=${targetChat}&${
-        isGif ? "document" : "photo"
-      }=${encodeURIComponent(
+      const fieldName = isGif ? "document" : "photo";
+      const actualUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${apiMethod}?chat_id=${targetChat}&${fieldName}=${encodeURIComponent(
         imageUrl
       )}&caption=${encodedMsg}&parse_mode=HTML&disable_web_page_preview=true&width=${
         sizeConfig.width
@@ -1289,11 +1345,11 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
         msg.substring(0, 200) + "..."
       );
 
-      // Use sendDocument for GIFs (more reliable than sendAnimation), sendPhoto for static images
-      const sendMethod = isGif ? bot.sendDocument : bot.sendPhoto;
-      const methodName = isGif ? "document" : "photo";
+      // Use direct API calls instead of node-telegram-bot-api library
 
-      await sendMethod(targetChat, imageUrl, {
+      await makeTelegramRequest(apiMethod, {
+        chat_id: targetChat,
+        [fieldName]: imageUrl,
         caption: msg,
         parse_mode: "HTML",
         disable_web_page_preview: true,
@@ -1301,7 +1357,7 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
         height: sizeConfig.height,
       });
       console.log(
-        `[Deposit] ${token} deposit ${methodName} sent successfully to ${
+        `[Deposit] ${token} deposit ${mediaType} sent successfully to ${
           isTestMode ? "DEV" : "PROD"
         } chat!`
       );
@@ -1309,10 +1365,12 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       // Mirroring logic
       if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
         console.log(
-          `[Mirror] Mirroring ${token} deposit ${methodName} to dev chat`
+          `[Mirror] Mirroring ${token} deposit ${mediaType} to dev chat`
         );
         try {
-          await sendMethod(DEV_CHAT_ID, imageUrl, {
+          await makeTelegramRequest(apiMethod, {
+            chat_id: DEV_CHAT_ID,
+            [fieldName]: imageUrl,
             caption: msg,
             parse_mode: "HTML",
             disable_web_page_preview: true,
@@ -1320,11 +1378,11 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
             height: sizeConfig.height,
           });
           console.log(
-            `[Mirror] ${token} deposit ${methodName} successfully mirrored to dev chat`
+            `[Mirror] ${token} deposit ${mediaType} successfully mirrored to dev chat`
           );
         } catch (mirrorError) {
           console.error(
-            `[Mirror] Error mirroring ${token} deposit ${methodName} to dev chat:`,
+            `[Mirror] Error mirroring ${token} deposit ${mediaType} to dev chat:`,
             mirrorError
           );
         }
@@ -1371,7 +1429,9 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
       msg.substring(0, 200) + "..."
     );
 
-    await bot.sendMessage(targetChat, msg, {
+    await makeTelegramRequest("sendMessage", {
+      chat_id: targetChat,
+      text: msg,
       parse_mode: "HTML",
       disable_web_page_preview: true,
     });
@@ -1385,7 +1445,9 @@ async function sendDepositMessage(token, amount, from, to, txHash) {
     if (MIRROR_TO_DEV && !isTestMode && targetChat !== DEV_CHAT_ID) {
       console.log(`[Mirror] Mirroring ${token} deposit message to dev chat`);
       try {
-        await bot.sendMessage(DEV_CHAT_ID, msg, {
+        await makeTelegramRequest("sendMessage", {
+          chat_id: DEV_CHAT_ID,
+          text: msg,
           parse_mode: "HTML",
           disable_web_page_preview: true,
         });
@@ -2014,11 +2076,13 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
       const mediaType = isGif ? "document" : "photo";
       console.log(`[Test] Sending ${token} test ${mediaType} to DEV chat...`);
 
-      // Use sendDocument for GIFs (more reliable than sendAnimation), sendPhoto for static images
-      const sendMethod = isGif ? testBot.sendDocument : testBot.sendPhoto;
-      const methodName = isGif ? "document" : "photo";
+      // Use direct API calls instead of node-telegram-bot-api library
+      const apiMethod = isGif ? "sendDocument" : "sendPhoto";
+      const fieldName = isGif ? "document" : "photo";
 
-      await sendMethod(DEV_CHAT_ID, imageUrl, {
+      await makeTelegramRequest(apiMethod, {
+        chat_id: DEV_CHAT_ID,
+        [fieldName]: imageUrl,
         caption: msg,
         parse_mode: "HTML",
         disable_web_page_preview: true,
@@ -2026,7 +2090,7 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
         height: sizeConfig.height,
       });
       console.log(
-        `[Test] ${token} test ${methodName} sent successfully to DEV chat!`
+        `[Test] ${token} test ${mediaType} sent successfully to DEV chat!`
       );
       return;
     } catch (error) {
@@ -2042,7 +2106,9 @@ async function sendTestMessageToDev(token, amount, from, to, txHash) {
 
   // Final fallback to text message
   console.log(`[Test] Sending ${token} test text message to DEV chat...`);
-  await testBot.sendMessage(DEV_CHAT_ID, msg, {
+  await makeTelegramRequest("sendMessage", {
+    chat_id: DEV_CHAT_ID,
+    text: msg,
     parse_mode: "HTML",
     disable_web_page_preview: true,
   });
